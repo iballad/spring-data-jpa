@@ -1,11 +1,11 @@
 /*
- * Copyright 2014-2015 the original author or authors.
+ * Copyright 2014-2019 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
  *
- *      http://www.apache.org/licenses/LICENSE-2.0
+ *      https://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -21,26 +21,31 @@ import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 
+import javax.persistence.AttributeNode;
 import javax.persistence.EntityGraph;
 import javax.persistence.EntityManager;
 import javax.persistence.Query;
 import javax.persistence.Subgraph;
 
+import org.springframework.lang.Nullable;
 import org.springframework.util.Assert;
 import org.springframework.util.ClassUtils;
+import org.springframework.util.ObjectUtils;
 import org.springframework.util.ReflectionUtils;
 import org.springframework.util.StringUtils;
 
 /**
  * Utils for bridging various JPA 2.1 features.
- * 
+ *
  * @author Thomas Darimont
  * @author Oliver Gierke
+ * @author Christoph Strobl
+ * @author Mark Paluch
  * @since 1.6
  */
 public class Jpa21Utils {
 
-	private static final Method GET_ENTITY_GRAPH_METHOD;
+	private static final @Nullable Method GET_ENTITY_GRAPH_METHOD;
 	private static final boolean JPA21_AVAILABLE = ClassUtils.isPresent("javax.persistence.NamedEntityGraph",
 			Jpa21Utils.class.getClassLoader());
 
@@ -59,14 +64,14 @@ public class Jpa21Utils {
 
 	/**
 	 * Returns a {@link Map} with hints for a JPA 2.1 fetch-graph or load-graph if running under JPA 2.1.
-	 * 
+	 *
 	 * @param em must not be {@literal null}.
 	 * @param entityGraph can be {@literal null}.
 	 * @param entityType must not be {@literal null}.
 	 * @return a {@code Map} with the hints or an empty {@code Map} if no hints were found.
 	 * @since 1.8
 	 */
-	public static Map<String, Object> tryGetFetchGraphHints(EntityManager em, JpaEntityGraph entityGraph,
+	public static Map<String, Object> tryGetFetchGraphHints(EntityManager em, @Nullable JpaEntityGraph entityGraph,
 			Class<?> entityType) {
 
 		if (entityGraph == null) {
@@ -84,13 +89,15 @@ public class Jpa21Utils {
 
 	/**
 	 * Adds a JPA 2.1 fetch-graph or load-graph hint to the given {@link Query} if running under JPA 2.1.
-	 * 
-	 * @see JPA 2.1 Specfication 3.7.4 - Use of Entity Graphs in find and query operations P.117
+	 *
+	 * @see <a href="download.oracle.com/otn-pub/jcp/persistence-2_1-fr-eval-spec/JavaPersistence.pdf">JPA 2.1
+	 *      Specfication 3.7.4 - Use of Entity Graphs in find and query operations P.117</a>
 	 * @param em must not be {@literal null}.
 	 * @param jpaEntityGraph must not be {@literal null}.
 	 * @param entityType must not be {@literal null}.
 	 * @return the {@link EntityGraph} described by the given {@code entityGraph}.
 	 */
+	@Nullable
 	private static EntityGraph<?> tryGetFetchGraph(EntityManager em, JpaEntityGraph jpaEntityGraph, Class<?> entityType) {
 
 		Assert.notNull(em, "EntityManager must not be null!");
@@ -112,7 +119,7 @@ public class Jpa21Utils {
 
 	/**
 	 * Creates a dynamic {@link EntityGraph} from the given {@link JpaEntityGraph} information.
-	 * 
+	 *
 	 * @param em must not be {@literal null}.
 	 * @param jpaEntityGraph must not be {@literal null}.
 	 * @param entityType must not be {@literal null}.
@@ -135,7 +142,7 @@ public class Jpa21Utils {
 
 	/**
 	 * Configures the given {@link EntityGraph} with the fetch graph information stored in {@link JpaEntityGraph}.
-	 * 
+	 *
 	 * @param jpaEntityGraph
 	 * @param entityGraph
 	 */
@@ -145,26 +152,111 @@ public class Jpa21Utils {
 
 		// Sort to ensure that the intermediate entity subgraphs are created accordingly.
 		Collections.sort(attributePaths);
-		Collections.reverse(attributePaths);
 
-		// We build the entity graph based on the paths with highest depth first
 		for (String path : attributePaths) {
 
-			// Fast path - just single attribute
-			if (!path.contains(".")) {
-				entityGraph.addAttributeNodes(path);
-				continue;
-			}
-
-			// We need to build nested sub fetch graphs
 			String[] pathComponents = StringUtils.delimitedListToStringArray(path, ".");
-			Subgraph<?> parent = null;
+			createGraph(pathComponents, 0, entityGraph, null);
+		}
+	}
 
-			for (int c = 0; c < pathComponents.length - 1; c++) {
-				parent = c == 0 ? entityGraph.addSubgraph(pathComponents[c]) : parent.addSubgraph(pathComponents[c]);
+	private static void createGraph(String[] pathComponents, int offset, EntityGraph<?> root,
+			@Nullable Subgraph<?> parent) {
+
+		String attributeName = pathComponents[offset];
+
+		// we found our leaf property, now let's see if it already exists and add it if not
+		if (pathComponents.length - 1 == offset) {
+
+			if (parent == null && !exists(attributeName, root.getAttributeNodes())) {
+				root.addAttributeNodes(attributeName);
+			} else if (parent != null && !exists(attributeName, parent.getAttributeNodes())) {
+				parent.addAttributeNodes(attributeName);
 			}
 
-			parent.addAttributeNodes(pathComponents[pathComponents.length - 1]);
+			return;
 		}
+
+		AttributeNode<?> node = findAttributeNode(attributeName, root, parent);
+
+		if (node != null) {
+
+			Subgraph<?> subgraph = getSubgraph(node);
+
+			if (subgraph == null) {
+				subgraph = parent != null ? parent.addSubgraph(attributeName) : root.addSubgraph(attributeName);
+			}
+
+			createGraph(pathComponents, offset + 1, root, subgraph);
+
+			return;
+		}
+
+		if (parent == null) {
+			createGraph(pathComponents, offset + 1, root, root.addSubgraph(attributeName));
+		} else {
+			createGraph(pathComponents, offset + 1, root, parent.addSubgraph(attributeName));
+		}
+	}
+
+	/**
+	 * Checks the given {@link List} of {@link AttributeNode}s for the existence of an {@link AttributeNode} matching the
+	 * given {@literal attributeNodeName}.
+	 *
+	 * @param attributeNodeName
+	 * @param nodes
+	 * @return
+	 */
+	private static boolean exists(String attributeNodeName, List<AttributeNode<?>> nodes) {
+		return findAttributeNode(attributeNodeName, nodes) != null;
+	}
+
+	/**
+	 * Find the {@link AttributeNode} matching the given {@literal attributeNodeName} in given {@link Subgraph} or
+	 * {@link EntityGraph} favoring matches {@link Subgraph} over {@link EntityGraph}.
+	 *
+	 * @param attributeNodeName
+	 * @param entityGraph
+	 * @param parent
+	 * @return {@literal null} if not found.
+	 */
+	@Nullable
+	private static AttributeNode<?> findAttributeNode(String attributeNodeName, EntityGraph<?> entityGraph,
+			@Nullable Subgraph<?> parent) {
+		return findAttributeNode(attributeNodeName,
+				parent != null ? parent.getAttributeNodes() : entityGraph.getAttributeNodes());
+	}
+
+	/**
+	 * Find the {@link AttributeNode} matching the given {@literal attributeNodeName} in given {@link List} of
+	 * {@link AttributeNode}s.
+	 *
+	 * @param attributeNodeName
+	 * @param nodes
+	 * @return {@literal null} if not found.
+	 */
+	@Nullable
+	private static AttributeNode<?> findAttributeNode(String attributeNodeName, List<AttributeNode<?>> nodes) {
+
+		for (AttributeNode<?> node : nodes) {
+			if (ObjectUtils.nullSafeEquals(node.getAttributeName(), attributeNodeName)) {
+				return node;
+			}
+		}
+
+		return null;
+	}
+
+	/**
+	 * Extracts the first {@link Subgraph} from the given {@link AttributeNode}. Ignores any potential different
+	 * {@link Subgraph}s registered for more concrete {@link Class}es as the dynamically created graph does not
+	 * distinguish between those.
+	 *
+	 * @param node
+	 * @return
+	 */
+	@Nullable
+	private static Subgraph<?> getSubgraph(AttributeNode<?> node) {
+		return node.getSubgraphs().isEmpty() ? null : node.getSubgraphs().values().iterator().next();
 	}
 }

@@ -1,11 +1,11 @@
 /*
- * Copyright 2013-2016 the original author or authors.
+ * Copyright 2013-2019 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
  *
- *      http://www.apache.org/licenses/LICENSE-2.0
+ *      https://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -25,14 +25,16 @@ import javax.persistence.metamodel.Attribute;
 import javax.persistence.metamodel.PluralAttribute;
 
 import org.springframework.data.domain.Sort;
+import org.springframework.lang.Nullable;
 import org.springframework.util.Assert;
 
 /**
  * Sort option for queries that wraps JPA meta-model {@link Attribute}s for sorting.
- * 
+ *
  * @author Thomas Darimont
  * @author Oliver Gierke
  * @author Christoph Strobl
+ * @author David Madden
  */
 public class JpaSort extends Sort {
 
@@ -40,7 +42,7 @@ public class JpaSort extends Sort {
 
 	/**
 	 * Creates a new {@link JpaSort} for the given attributes with the default sort direction.
-	 * 
+	 *
 	 * @param attributes must not be {@literal null} or empty.
 	 */
 	public JpaSort(Attribute<?, ?>... attributes) {
@@ -49,7 +51,7 @@ public class JpaSort extends Sort {
 
 	/**
 	 * Creates a new {@link JpaSort} instance with the given {@link Path}s.
-	 * 
+	 *
 	 * @param paths must not be {@literal null} or empty.
 	 */
 	public JpaSort(JpaSort.Path<?, ?>... paths) {
@@ -58,7 +60,7 @@ public class JpaSort extends Sort {
 
 	/**
 	 * Creates a new {@link JpaSort} for the given direction and attributes.
-	 * 
+	 *
 	 * @param direction the sorting direction.
 	 * @param attributes must not be {@literal null} or empty.
 	 */
@@ -68,7 +70,7 @@ public class JpaSort extends Sort {
 
 	/**
 	 * Creates a new {@link JpaSort} for the given direction and {@link Path}s.
-	 * 
+	 *
 	 * @param direction the sorting direction.
 	 * @param paths must not be {@literal null} or empty.
 	 */
@@ -80,7 +82,7 @@ public class JpaSort extends Sort {
 		this(Collections.<Order> emptyList(), direction, paths);
 	}
 
-	private JpaSort(List<Order> orders, Direction direction, List<Path<?, ?>> paths) {
+	private JpaSort(List<Order> orders, @Nullable Direction direction, List<Path<?, ?>> paths) {
 		super(combine(orders, direction, paths));
 	}
 
@@ -90,12 +92,12 @@ public class JpaSort extends Sort {
 
 	/**
 	 * Returns a new {@link JpaSort} with the given sorting criteria added to the current one.
-	 * 
+	 *
 	 * @param direction can be {@literal null}.
 	 * @param attributes must not be {@literal null}.
 	 * @return
 	 */
-	public JpaSort and(Direction direction, Attribute<?, ?>... attributes) {
+	public JpaSort and(@Nullable Direction direction, Attribute<?, ?>... attributes) {
 
 		Assert.notNull(attributes, "Attributes must not be null!");
 
@@ -104,12 +106,12 @@ public class JpaSort extends Sort {
 
 	/**
 	 * Returns a new {@link JpaSort} with the given sorting criteria added to the current one.
-	 * 
+	 *
 	 * @param direction can be {@literal null}.
 	 * @param paths must not be {@literal null}.
 	 * @return
 	 */
-	public JpaSort and(Direction direction, Path<?, ?>... paths) {
+	public JpaSort and(@Nullable Direction direction, Path<?, ?>... paths) {
 
 		Assert.notNull(paths, "Paths must not be null!");
 
@@ -129,9 +131,9 @@ public class JpaSort extends Sort {
 	 * @param properties must not be {@literal null} or empty.
 	 * @return
 	 */
-	public JpaSort andUnsafe(Direction direction, String... properties) {
+	public JpaSort andUnsafe(@Nullable Direction direction, String... properties) {
 
-		Assert.notEmpty(properties, "Properties must not be null!");
+		Assert.notEmpty(properties, "Properties must not be empty!");
 
 		List<Order> orders = new ArrayList<Order>();
 
@@ -148,14 +150,14 @@ public class JpaSort extends Sort {
 
 	/**
 	 * Turns the given {@link Attribute}s into {@link Path}s.
-	 * 
+	 *
 	 * @param attributes must not be {@literal null} or empty.
 	 * @return
 	 */
 	private static Path<?, ?>[] paths(Attribute<?, ?>[] attributes) {
 
 		Assert.notNull(attributes, "Attributes must not be null!");
-		Assert.isTrue(attributes.length > 0, "Attributes must not be empty");
+		Assert.notEmpty(attributes, "Attributes must not be empty!");
 
 		Path<?, ?>[] paths = new Path[attributes.length];
 
@@ -166,7 +168,7 @@ public class JpaSort extends Sort {
 		return paths;
 	}
 
-	private static List<Order> combine(List<Order> orders, Direction direction, List<Path<?, ?>> paths) {
+	private static List<Order> combine(List<Order> orders, @Nullable Direction direction, List<Path<?, ?>> paths) {
 
 		List<Order> result = new ArrayList<Sort.Order>(orders);
 
@@ -179,28 +181,26 @@ public class JpaSort extends Sort {
 
 	/**
 	 * Creates a new {@link Path} for the given {@link Attribute}.
-	 * 
+	 *
 	 * @param attribute must not be {@literal null}.
 	 * @return
 	 */
-	@SuppressWarnings("unchecked")
 	public static <A extends Attribute<T, S>, T, S> Path<T, S> path(A attribute) {
 
 		Assert.notNull(attribute, "Attribute must not be null!");
-		return new Path<T, S>(Arrays.asList(attribute));
+		return new Path<>(Collections.singletonList(attribute));
 	}
 
 	/**
 	 * Creates a new {@link Path} for the given {@link PluralAttribute}.
-	 * 
+	 *
 	 * @param attribute must not be {@literal null}.
 	 * @return
 	 */
-	@SuppressWarnings("unchecked")
 	public static <P extends PluralAttribute<T, ?, S>, T, S> Path<T, S> path(P attribute) {
 
 		Assert.notNull(attribute, "Attribute must not be null!");
-		return new Path<T, S>(Arrays.asList(attribute));
+		return new Path<>(Collections.singletonList(attribute));
 	}
 
 	/**
@@ -240,7 +240,7 @@ public class JpaSort extends Sort {
 
 		Assert.notEmpty(properties, "Properties must not be empty!");
 
-		List<Order> orders = new ArrayList<Order>();
+		List<Order> orders = new ArrayList<>(properties.size());
 
 		for (String property : properties) {
 			orders.add(new JpaOrder(direction, property));
@@ -251,7 +251,7 @@ public class JpaSort extends Sort {
 
 	/**
 	 * Value object to abstract a collection of {@link Attribute}s.
-	 * 
+	 *
 	 * @author Oliver Gierke
 	 */
 	public static class Path<T, S> {
@@ -264,7 +264,7 @@ public class JpaSort extends Sort {
 
 		/**
 		 * Collects the given {@link Attribute} and returning a new {@link Path} pointing to the attribute type.
-		 * 
+		 *
 		 * @param attribute must not be {@literal null}.
 		 * @return
 		 */
@@ -274,7 +274,7 @@ public class JpaSort extends Sort {
 
 		/**
 		 * Collects the given {@link PluralAttribute} and returning a new {@link Path} pointing to the attribute type.
-		 * 
+		 *
 		 * @param attribute must not be {@literal null}.
 		 * @return
 		 */
@@ -313,7 +313,7 @@ public class JpaSort extends Sort {
 	 * Custom {@link Order} that keeps a flag to indicate unsafe property handling, i.e. the String provided is not
 	 * necessarily a property but can be an arbitrary expression piped into the query execution. We also keep an
 	 * additional {@code ignoreCase} flag around as the constructor of the superclass is private currently.
-	 * 
+	 *
 	 * @author Christoph Strobl
 	 * @author Oliver Gierke
 	 */
@@ -331,7 +331,7 @@ public class JpaSort extends Sort {
 		 * @param direction can be {@literal null}, will default to {@link Sort#DEFAULT_DIRECTION}.
 		 * @param property must not be {@literal null}.
 		 */
-		private JpaOrder(Direction direction, String property) {
+		private JpaOrder(@Nullable Direction direction, String property) {
 			this(direction, property, NullHandling.NATIVE);
 		}
 
@@ -343,11 +343,11 @@ public class JpaSort extends Sort {
 		 * @param property must not be {@literal null}.
 		 * @param nullHandlingHint can be {@literal null}, will default to {@link NullHandling#NATIVE}.
 		 */
-		private JpaOrder(Direction direction, String property, NullHandling nullHandlingHint) {
+		private JpaOrder(@Nullable Direction direction, String property, NullHandling nullHandlingHint) {
 			this(direction, property, nullHandlingHint, false, true);
 		}
 
-		private JpaOrder(Direction direction, String property, NullHandling nullHandling, boolean ignoreCase,
+		private JpaOrder(@Nullable Direction direction, String property, NullHandling nullHandling, boolean ignoreCase,
 				boolean unsafe) {
 
 			super(direction, property, nullHandling);
@@ -384,13 +384,13 @@ public class JpaSort extends Sort {
 			Assert.notEmpty(properties, "Properties must not be empty!");
 			Assert.noNullElements(properties, "Properties must not contain null values!");
 
-			List<Order> orders = new ArrayList<Order>();
+			List<Order> orders = new ArrayList<>(properties.length);
 
 			for (String property : properties) {
 				orders.add(new JpaOrder(getDirection(), property, getNullHandling(), isIgnoreCase(), this.unsafe));
 			}
 
-			return new Sort(orders);
+			return Sort.by(orders);
 		}
 
 		/*

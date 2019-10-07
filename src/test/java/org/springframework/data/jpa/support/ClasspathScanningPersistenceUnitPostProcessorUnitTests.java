@@ -1,11 +1,11 @@
 /*
- * Copyright 2011-2014 the original author or authors.
+ * Copyright 2011-2019 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
  *
- *      http://www.apache.org/licenses/LICENSE-2.0
+ *      https://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -18,6 +18,7 @@ package org.springframework.data.jpa.support;
 import static org.mockito.Mockito.*;
 
 import java.io.IOException;
+import java.net.URL;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.Set;
@@ -27,7 +28,7 @@ import javax.persistence.Entity;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.mockito.Mock;
-import org.mockito.runners.MockitoJUnitRunner;
+import org.mockito.junit.MockitoJUnitRunner;
 import org.springframework.core.io.DefaultResourceLoader;
 import org.springframework.core.io.Resource;
 import org.springframework.core.io.ResourceLoader;
@@ -39,7 +40,7 @@ import org.springframework.test.util.ReflectionTestUtils;
 
 /**
  * Unit tests for {@link ClasspathScanningPersistenceUnitPostProcessor}.
- * 
+ *
  * @author Oliver Gierke
  * @author Thomas Darimont
  */
@@ -82,10 +83,7 @@ public class ClasspathScanningPersistenceUnitPostProcessorUnitTests {
 		verify(pui).addManagedClassName(SampleEntity.class.getName());
 	}
 
-	/**
-	 * @see DATAJPA-407
-	 */
-	@Test
+	@Test // DATAJPA-407
 	public void findsMappingFile() {
 
 		ClasspathScanningPersistenceUnitPostProcessor processor = new ClasspathScanningPersistenceUnitPostProcessor(
@@ -100,11 +98,7 @@ public class ClasspathScanningPersistenceUnitPostProcessorUnitTests {
 		verify(pui).addMappingFileName(expected);
 	}
 
-	/**
-	 * @see DATAJPA-353
-	 * @see DATAJPA-407
-	 */
-	@Test
+	@Test // DATAJPA-353, DATAJPA-407
 	public void shouldFindJpaMappingFilesFromMultipleLocationsOnClasspath() {
 
 		ClasspathScanningPersistenceUnitPostProcessor processor = new ClasspathScanningPersistenceUnitPostProcessor(
@@ -118,10 +112,7 @@ public class ClasspathScanningPersistenceUnitPostProcessorUnitTests {
 		verify(pui).addMappingFileName("org/springframework/data/jpa/support/module2/module2-orm.xml");
 	}
 
-	/**
-	 * @see DATAJPA-519
-	 */
-	@Test
+	@Test // DATAJPA-519
 	public void shouldFindJpaMappingFilesFromNestedJarLocationsOnClasspath() {
 
 		String nestedModule3Path = "org/springframework/data/jpa/support/module3/module3-orm.xml";
@@ -129,6 +120,7 @@ public class ClasspathScanningPersistenceUnitPostProcessorUnitTests {
 
 		ResourceLoader resolver = new PathMatchingResourcePatternResolver(new DefaultResourceLoader()) {
 
+			@Override
 			public Resource[] getResources(String locationPattern) throws IOException {
 
 				Resource[] resources = super.getResources(locationPattern);
@@ -139,14 +131,14 @@ public class ClasspathScanningPersistenceUnitPostProcessorUnitTests {
 			}
 
 			@Override
-			protected Set<Resource> doFindPathMatchingJarResources(Resource rootDirResource, String subPattern)
+			protected Set<Resource> doFindPathMatchingJarResources(Resource rootDirResource, URL rootUri, String subPattern)
 					throws IOException {
 
-				if (fileInJarUrl.equals(rootDirResource.getURI().toString())) {
+				if (fileInJarUrl.equals(rootUri.toString())) {
 					return Collections.singleton(rootDirResource);
 				}
 
-				return super.doFindPathMatchingJarResources(rootDirResource, subPattern);
+				return super.doFindPathMatchingJarResources(rootDirResource, rootUri, subPattern);
 			}
 		};
 

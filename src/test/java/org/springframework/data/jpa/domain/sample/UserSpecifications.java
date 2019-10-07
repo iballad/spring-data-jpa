@@ -1,11 +1,11 @@
 /*
- * Copyright 2008-2016 the original author or authors.
+ * Copyright 2008-2019 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
  *
- *      http://www.apache.org/licenses/LICENSE-2.0
+ *      https://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -24,14 +24,14 @@ import org.springframework.data.jpa.domain.Specification;
 
 /**
  * Collection of {@link Specification}s for a {@link User}.
- * 
+ *
  * @author Oliver Gierke
  */
 public class UserSpecifications {
 
 	/**
 	 * A {@link Specification} to match on a {@link User}'s firstname.
-	 * 
+	 *
 	 * @param firstname
 	 * @return
 	 */
@@ -42,7 +42,7 @@ public class UserSpecifications {
 
 	/**
 	 * A {@link Specification} to match on a {@link User}'s lastname.
-	 * 
+	 *
 	 * @param firstname
 	 * @return
 	 */
@@ -53,7 +53,7 @@ public class UserSpecifications {
 
 	/**
 	 * A {@link Specification} to do a like-match on a {@link User}'s firstname.
-	 * 
+	 *
 	 * @param firstname
 	 * @return
 	 */
@@ -61,6 +61,7 @@ public class UserSpecifications {
 
 		return new Specification<User>() {
 
+			@Override
 			public Predicate toPredicate(Root<User> root, CriteriaQuery<?> query, CriteriaBuilder cb) {
 
 				return cb.like(root.get("firstname").as(String.class), String.format("%%%s%%", expression));
@@ -71,7 +72,7 @@ public class UserSpecifications {
 	/**
 	 * A {@link Specification} to do a like-match on a {@link User}'s lastname but also adding a sort order on the
 	 * firstname.
-	 * 
+	 *
 	 * @param firstname
 	 * @return
 	 */
@@ -79,6 +80,7 @@ public class UserSpecifications {
 
 		return new Specification<User>() {
 
+			@Override
 			public Predicate toPredicate(Root<User> root, CriteriaQuery<?> query, CriteriaBuilder cb) {
 
 				query.orderBy(cb.asc(root.get("firstname")));
@@ -92,6 +94,7 @@ public class UserSpecifications {
 
 		return new Specification<T>() {
 
+			@Override
 			public Predicate toPredicate(Root<T> root, CriteriaQuery<?> query, CriteriaBuilder builder) {
 
 				return builder.equal(root.get(property), value);

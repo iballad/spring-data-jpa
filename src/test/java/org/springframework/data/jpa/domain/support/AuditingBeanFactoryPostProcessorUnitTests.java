@@ -1,11 +1,11 @@
 /*
- * Copyright 2008-2014 the original author or authors.
+ * Copyright 2008-2019 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
  *
- *      http://www.apache.org/licenses/LICENSE-2.0
+ *      https://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -15,8 +15,7 @@
  */
 package org.springframework.data.jpa.domain.support;
 
-import static org.hamcrest.Matchers.*;
-import static org.junit.Assert.*;
+import static org.assertj.core.api.Assertions.*;
 
 import javax.persistence.EntityManagerFactory;
 
@@ -29,9 +28,10 @@ import org.springframework.core.io.ClassPathResource;
 
 /**
  * Unit test for {@link AuditingBeanFactoryPostProcessor}.
- * 
+ *
  * @author Oliver Gierke
  * @author Thomas Darimont
+ * @author Jens Schauder
  */
 public class AuditingBeanFactoryPostProcessorUnitTests {
 
@@ -63,21 +63,15 @@ public class AuditingBeanFactoryPostProcessorUnitTests {
 
 		processor.postProcessBeanFactory(beanFactory);
 
-		assertThat(beanFactory.isBeanNameInUse(AuditingBeanFactoryPostProcessor.BEAN_CONFIGURER_ASPECT_BEAN_NAME), is(true));
+		assertThat(beanFactory.isBeanNameInUse(AuditingBeanFactoryPostProcessor.BEAN_CONFIGURER_ASPECT_BEAN_NAME)).isTrue();
 	}
 
-	/**
-	 * @see DATAJPA-265
-	 */
-	@Test(expected = IllegalStateException.class)
+	@Test(expected = IllegalStateException.class) // DATAJPA-265
 	public void rejectsConfigurationWithoutSpringConfigured() {
 		processor.postProcessBeanFactory(new DefaultListableBeanFactory());
 	}
 
-	/**
-	 * @see DATAJPA-265
-	 */
-	@Test
+	@Test // DATAJPA-265
 	public void setsDependsOnOnEntityManagerFactory() {
 
 		processor.postProcessBeanFactory(beanFactory);
@@ -86,16 +80,13 @@ public class AuditingBeanFactoryPostProcessorUnitTests {
 
 		for (String emfDefinitionName : emfDefinitionNames) {
 			BeanDefinition emfDefinition = beanFactory.getBeanDefinition(emfDefinitionName);
-			assertThat(emfDefinition, is(notNullValue()));
-			assertThat(emfDefinition.getDependsOn(),
-					is(arrayContaining(AuditingBeanFactoryPostProcessor.BEAN_CONFIGURER_ASPECT_BEAN_NAME)));
+			assertThat(emfDefinition).isNotNull();
+			assertThat(emfDefinition.getDependsOn())
+					.containsExactly(AuditingBeanFactoryPostProcessor.BEAN_CONFIGURER_ASPECT_BEAN_NAME);
 		}
 	}
 
-	/**
-	 * @see DATAJPA-453
-	 */
-	@Test
+	@Test // DATAJPA-453
 	public void findsEntityManagerFactoryInParentBeanFactory() {
 
 		DefaultListableBeanFactory childFactory = new DefaultListableBeanFactory(getBeanFactory());

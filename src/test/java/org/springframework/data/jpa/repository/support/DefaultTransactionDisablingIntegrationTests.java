@@ -1,11 +1,11 @@
 /*
- * Copyright 2015 the original author or authors.
+ * Copyright 2015-2019 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
  *
- *      http://www.apache.org/licenses/LICENSE-2.0
+ *      https://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -15,12 +15,10 @@
  */
 package org.springframework.data.jpa.repository.support;
 
-import static org.hamcrest.CoreMatchers.*;
-import static org.junit.Assert.*;
+import static org.assertj.core.api.Assertions.*;
 
 import javax.persistence.TransactionRequiredException;
 
-import org.hamcrest.Matchers;
 import org.junit.Rule;
 import org.junit.Test;
 import org.junit.rules.ExpectedException;
@@ -35,8 +33,9 @@ import org.springframework.test.context.junit4.SpringJUnit4ClassRunner;
 
 /**
  * Integration tests for disabling default transactions using JavaConfig.
- * 
+ *
  * @author Oliver Gierke
+ * @author Jens Schauder
  * @soundtrack The Intersphere - Live in Mannheim
  */
 @RunWith(SpringJUnit4ClassRunner.class)
@@ -47,37 +46,27 @@ public abstract class DefaultTransactionDisablingIntegrationTests {
 	@Autowired UserRepository repository;
 	@Autowired DelegatingTransactionManager txManager;
 
-	/**
-	 * @see DATAJPA-685
-	 */
-	@Test
+	@Test // DATAJPA-685
 	public void considersExplicitConfigurationOnRepositoryInterface() {
 
-		repository.findOne(1);
+		repository.findById(1);
 
-		assertThat(txManager.getDefinition().isReadOnly(), is(false));
+		assertThat(txManager.getDefinition().isReadOnly()).isFalse();
 	}
 
-	/**
-	 * @see DATAJPA-685
-	 */
-	@Test
+	@Test // DATAJPA-685
 	public void doesNotUseDefaultTransactionsOnNonRedeclaredMethod() {
 
-		repository.findAll(new PageRequest(0, 10));
+		repository.findAll(PageRequest.of(0, 10));
 
-		assertThat(txManager.getDefinition(), is(nullValue()));
+		assertThat(txManager.getDefinition()).isNull();
 	}
 
-	/**
-	 * @see DATAJPA-685
-	 */
-	@Test
+	@Test // DATAJPA-685
 	public void persistingAnEntityShouldThrowExceptionDueToMissingTransaction() {
 
-		exception.expect(InvalidDataAccessApiUsageException.class);
-		exception.expectCause(is(Matchers.<Throwable> instanceOf(TransactionRequiredException.class)));
-
-		repository.saveAndFlush(new User());
+		assertThatThrownBy(() -> repository.saveAndFlush(new User())) //
+				.isInstanceOf(InvalidDataAccessApiUsageException.class) //
+				.hasCauseExactlyInstanceOf(TransactionRequiredException.class);
 	}
 }

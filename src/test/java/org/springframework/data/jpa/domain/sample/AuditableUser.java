@@ -1,11 +1,11 @@
 /*
- * Copyright 2008-2015 the original author or authors.
+ * Copyright 2008-2019 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
  *
- *      http://www.apache.org/licenses/LICENSE-2.0
+ *      https://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -24,11 +24,12 @@ import javax.persistence.ManyToMany;
 import javax.persistence.NamedQuery;
 
 import org.springframework.data.jpa.domain.AbstractAuditable;
+import org.springframework.lang.Nullable;
 
 /**
  * Sample auditable user to demonstrate working with {@code AbstractAuditableEntity}. No declaration of an ID is
  * necessary. Furthermore no auditing information has to be declared explicitly.
- * 
+ *
  * @author Oliver Gierke
  * @author Thomas Darimont
  */
@@ -40,24 +41,25 @@ public class AuditableUser extends AbstractAuditable<AuditableUser, Integer> {
 
 	private String firstname;
 
-	@ManyToMany(cascade = { CascadeType.PERSIST, CascadeType.MERGE }) private Set<AuditableRole> roles = new HashSet<AuditableRole>();
+	@ManyToMany(
+			cascade = { CascadeType.PERSIST, CascadeType.MERGE }) private final Set<AuditableRole> roles = new HashSet<>();
 
 	public AuditableUser() {
 		this(null);
 	}
 
-	public AuditableUser(Integer id) {
+	public AuditableUser(@Nullable Integer id) {
 		this(id, null);
 	}
 
-	public AuditableUser(Integer id, String firstname) {
+	public AuditableUser(@Nullable Integer id, String firstname) {
 		setId(id);
 		this.firstname = firstname;
 	}
 
 	/**
 	 * Returns the firstname.
-	 * 
+	 *
 	 * @return the firstname
 	 */
 	public String getFirstname() {
@@ -67,7 +69,7 @@ public class AuditableUser extends AbstractAuditable<AuditableUser, Integer> {
 
 	/**
 	 * Sets the firstname.
-	 * 
+	 *
 	 * @param firstname the firstname to set
 	 */
 	public void setFirstname(final String firstname) {

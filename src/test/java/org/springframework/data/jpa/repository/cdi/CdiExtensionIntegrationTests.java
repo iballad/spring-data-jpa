@@ -1,11 +1,11 @@
 /*
- * Copyright 2011-2014 the original author or authors.
+ * Copyright 2011-2019 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
  *
- *      http://www.apache.org/licenses/LICENSE-2.0
+ *      https://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -15,16 +15,15 @@
  */
 package org.springframework.data.jpa.repository.cdi;
 
-import static org.hamcrest.Matchers.*;
-import static org.junit.Assert.*;
+import static org.assertj.core.api.Assertions.*;
 
 import java.util.Set;
 
 import javax.enterprise.context.ApplicationScoped;
+import javax.enterprise.inject.se.SeContainer;
+import javax.enterprise.inject.se.SeContainerInitializer;
 import javax.enterprise.inject.spi.Bean;
 
-import org.apache.webbeans.cditest.CdiTestContainer;
-import org.apache.webbeans.cditest.CdiTestContainerLoader;
 import org.junit.BeforeClass;
 import org.junit.Test;
 import org.slf4j.Logger;
@@ -32,66 +31,66 @@ import org.slf4j.LoggerFactory;
 
 /**
  * Integration tests for Spring Data JPA CDI extension.
- * 
+ *
  * @author Dirk Mahler
  * @author Oliver Gierke
  * @author Mark Paluch
+ * @author Jens Schauder
  */
 public class CdiExtensionIntegrationTests {
 
+	static SeContainer container;
 	private static Logger LOGGER = LoggerFactory.getLogger(CdiExtensionIntegrationTests.class);
 
-	static CdiTestContainer container;
-
 	@BeforeClass
-	public static void setUp() throws Exception {
+	public static void setUp() {
 
-		container = CdiTestContainerLoader.getCdiContainer();
-		container.bootContainer();
+		container = SeContainerInitializer.newInstance() //
+				.disableDiscovery() //
+				.addPackages(PersonRepository.class) //
+				.initialize();
 
 		LOGGER.debug("CDI container bootstrapped!");
 	}
 
-	/**
-	 * @see DATAJPA-319
-	 */
-	@Test
+	@Test // DATAJPA-319, DATAJPA-1180
 	@SuppressWarnings("rawtypes")
 	public void foo() {
 
 		Set<Bean<?>> beans = container.getBeanManager().getBeans(PersonRepository.class);
 
-		assertThat(beans, hasSize(1));
-		assertThat(beans.iterator().next().getScope(), is(equalTo((Class) ApplicationScoped.class)));
+		assertThat(beans).hasSize(1);
+		assertThat(beans.iterator().next().getScope()).isEqualTo((Class) ApplicationScoped.class);
 	}
 
-	@Test
+	@Test // DATAJPA-136, DATAJPA-1180
 	public void saveAndFindAll() {
 
-		RepositoryConsumer repositoryConsumer = container.getInstance(RepositoryConsumer.class);
+		RepositoryConsumer repositoryConsumer = container.select(RepositoryConsumer.class).get();
 
 		Person person = new Person();
 		repositoryConsumer.save(person);
 		repositoryConsumer.findAll();
 	}
 
-	/**
-	 * @see DATAJPA-584
-	 */
-	@Test
+	@Test // DATAJPA-584, DATAJPA-1180
 	public void returnOneFromCustomImpl() {
 
-		RepositoryConsumer repositoryConsumer = container.getInstance(RepositoryConsumer.class);
-		assertThat(repositoryConsumer.returnOne(), is(1));
+		RepositoryConsumer repositoryConsumer = container.select(RepositoryConsumer.class).get();
+		assertThat(repositoryConsumer.returnOne()).isEqualTo(1);
 	}
 
-	/**
-	 * @see DATAJPA-584
-	 */
-	@Test
+	@Test // DATAJPA-584, DATAJPA-1180
 	public void useQualifiedCustomizedUserRepo() {
 
-		RepositoryConsumer repositoryConsumer = container.getInstance(RepositoryConsumer.class);
-		repositoryConsumer.doSomethonOnUserDB();
+		RepositoryConsumer repositoryConsumer = container.select(RepositoryConsumer.class).get();
+		repositoryConsumer.doSomethingOnUserDB();
+	}
+
+	@Test // DATAJPA-1287
+	public void useQualifiedFragmentUserRepo() {
+
+		RepositoryConsumer repositoryConsumer = container.select(RepositoryConsumer.class).get();
+		assertThat(repositoryConsumer.returnOneUserDB()).isEqualTo(1);
 	}
 }

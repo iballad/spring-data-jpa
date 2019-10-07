@@ -1,11 +1,11 @@
 /*
- * Copyright 2013-2014 the original author or authors.
+ * Copyright 2013-2019 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
  *
- *      http://www.apache.org/licenses/LICENSE-2.0
+ *      https://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -15,8 +15,7 @@
  */
 package org.springframework.data.jpa.repository;
 
-import static org.hamcrest.Matchers.*;
-import static org.junit.Assert.*;
+import static org.assertj.core.api.Assertions.*;
 
 import java.util.Arrays;
 import java.util.List;
@@ -46,8 +45,10 @@ import org.springframework.transaction.annotation.Transactional;
 
 /**
  * Tests some usage variants of composite keys with spring data jpa.
- * 
+ *
  * @author Thomas Darimont
+ * @author Mark Paluch
+ * @author Jens Schauder
  */
 @RunWith(SpringJUnit4ClassRunner.class)
 @ContextConfiguration(classes = SampleConfig.class)
@@ -60,10 +61,10 @@ public class RepositoryWithCompositeKeyTests {
 	@Autowired EmployeeRepositoryWithEmbeddedId employeeRepositoryWithEmbeddedId;
 
 	/**
-	 * @see DATAJPA-269
-	 * @see Final JPA 2.0 Specification 2.4.1.3 Derived Identities Example 2
+	 * @see <a href="download.oracle.com/otn-pub/jcp/persistence-2_1-fr-eval-spec/JavaPersistence.pdf">Final JPA 2.0
+	 *      Specification 2.4.1.3 Derived Identities Example 2</a>
 	 */
-	@Test
+	@Test // DATAJPA-269
 	public void shouldSupportSavingEntitiesWithCompositeKeyClassesWithIdClassAndDerivedIdentities() {
 
 		IdClassExampleDepartment dep = new IdClassExampleDepartment();
@@ -78,18 +79,18 @@ public class RepositoryWithCompositeKeyTests {
 		IdClassExampleEmployeePK key = new IdClassExampleEmployeePK();
 		key.setDepartment(dep.getDepartmentId());
 		key.setEmpId(emp.getEmpId());
-		IdClassExampleEmployee persistedEmp = employeeRepositoryWithIdClass.findOne(key);
+		IdClassExampleEmployee persistedEmp = employeeRepositoryWithIdClass.findById(key).get();
 
-		assertThat(persistedEmp, is(notNullValue()));
-		assertThat(persistedEmp.getDepartment(), is(notNullValue()));
-		assertThat(persistedEmp.getDepartment().getName(), is(dep.getName()));
+		assertThat(persistedEmp).isNotNull();
+		assertThat(persistedEmp.getDepartment()).isNotNull();
+		assertThat(persistedEmp.getDepartment().getName()).isEqualTo(dep.getName());
 	}
 
 	/**
-	 * @see DATAJPA-269
-	 * @see Final JPA 2.0 Specification 2.4.1.3 Derived Identities Example 3
+	 * @see <a href="download.oracle.com/otn-pub/jcp/persistence-2_1-fr-eval-spec/JavaPersistence.pdf">Final JPA 2.0
+	 *      Specification 2.4.1.3 Derived Identities Example 3</a>
 	 */
-	@Test
+	@Test // DATAJPA-269
 	public void shouldSupportSavingEntitiesWithCompositeKeyClassesWithEmbeddedIdsAndDerivedIdentities() {
 
 		EmbeddedIdExampleDepartment dep = new EmbeddedIdExampleDepartment();
@@ -105,17 +106,14 @@ public class RepositoryWithCompositeKeyTests {
 		EmbeddedIdExampleEmployeePK key = new EmbeddedIdExampleEmployeePK();
 		key.setDepartmentId(emp.getDepartment().getDepartmentId());
 		key.setEmployeeId(emp.getEmployeePk().getEmployeeId());
-		EmbeddedIdExampleEmployee persistedEmp = employeeRepositoryWithEmbeddedId.findOne(key);
+		EmbeddedIdExampleEmployee persistedEmp = employeeRepositoryWithEmbeddedId.findById(key).get();
 
-		assertThat(persistedEmp, is(notNullValue()));
-		assertThat(persistedEmp.getDepartment(), is(notNullValue()));
-		assertThat(persistedEmp.getDepartment().getName(), is(dep.getName()));
+		assertThat(persistedEmp).isNotNull();
+		assertThat(persistedEmp.getDepartment()).isNotNull();
+		assertThat(persistedEmp.getDepartment().getName()).isEqualTo(dep.getName());
 	}
 
-	/**
-	 * @see DATAJPA-472
-	 */
-	@Test
+	@Test // DATAJPA-472, DATAJPA-912
 	public void shouldSupportFindAllWithPageableAndEntityWithIdClass() throws Exception {
 
 		if (Package.getPackage("org.hibernate.cfg").getImplementationVersion().startsWith("4.1.")) {
@@ -133,16 +131,13 @@ public class RepositoryWithCompositeKeyTests {
 		emp.setDepartment(dep);
 		emp = employeeRepositoryWithIdClass.save(emp);
 
-		Page<IdClassExampleEmployee> page = employeeRepositoryWithIdClass.findAll(new PageRequest(0, 10));
+		Page<IdClassExampleEmployee> page = employeeRepositoryWithIdClass.findAll(PageRequest.of(0, 1));
 
-		assertThat(page, is(notNullValue()));
-		assertThat(page.getTotalElements(), is(1L));
+		assertThat(page).isNotNull();
+		assertThat(page.getTotalElements()).isEqualTo(1L);
 	}
 
-	/**
-	 * @see DATAJPA-497
-	 */
-	@Test
+	@Test // DATAJPA-497
 	public void sortByEmbeddedPkFieldInCompositePkWithEmbeddedIdInQueryDsl() {
 
 		EmbeddedIdExampleDepartment dep1 = new EmbeddedIdExampleDepartment();
@@ -169,19 +164,16 @@ public class RepositoryWithCompositeKeyTests {
 		emp3 = employeeRepositoryWithEmbeddedId.save(emp3);
 
 		QEmbeddedIdExampleEmployee emp = QEmbeddedIdExampleEmployee.embeddedIdExampleEmployee;
-		List<EmbeddedIdExampleEmployee> result = employeeRepositoryWithEmbeddedId.findAll(
-				emp.employeePk.departmentId.eq(dep2.getDepartmentId()), emp.employeePk.employeeId.asc());
+		List<EmbeddedIdExampleEmployee> result = employeeRepositoryWithEmbeddedId
+				.findAll(emp.employeePk.departmentId.eq(dep2.getDepartmentId()), emp.employeePk.employeeId.asc());
 
-		assertThat(result, is(notNullValue()));
-		assertThat(result, hasSize(2));
-		assertThat(result.get(0), is(emp3));
-		assertThat(result.get(1), is(emp1));
+		assertThat(result).isNotNull();
+		assertThat(result).hasSize(2);
+		assertThat(result.get(0)).isEqualTo(emp3);
+		assertThat(result.get(1)).isEqualTo(emp1);
 	}
 
-	/**
-	 * @see DATAJPA-497
-	 */
-	@Test
+	@Test // DATAJPA-497
 	public void sortByEmbeddedPkFieldInCompositePkWithIdClassInQueryDsl() {
 
 		IdClassExampleDepartment dep1 = new IdClassExampleDepartment();
@@ -208,19 +200,16 @@ public class RepositoryWithCompositeKeyTests {
 		emp3 = employeeRepositoryWithIdClass.save(emp3);
 
 		QIdClassExampleEmployee emp = QIdClassExampleEmployee.idClassExampleEmployee;
-		List<IdClassExampleEmployee> result = employeeRepositoryWithIdClass.findAll(
-				emp.department.departmentId.eq(dep2.getDepartmentId()), emp.empId.asc());
+		List<IdClassExampleEmployee> result = employeeRepositoryWithIdClass
+				.findAll(emp.department.departmentId.eq(dep2.getDepartmentId()), emp.empId.asc());
 
-		assertThat(result, is(notNullValue()));
-		assertThat(result, hasSize(2));
-		assertThat(result.get(0), is(emp3));
-		assertThat(result.get(1), is(emp1));
+		assertThat(result).isNotNull();
+		assertThat(result).hasSize(2);
+		assertThat(result.get(0)).isEqualTo(emp3);
+		assertThat(result.get(1)).isEqualTo(emp1);
 	}
 
-	/**
-	 * @see DATAJPA-527
-	 */
-	@Test
+	@Test // DATAJPA-527, DATAJPA-1148
 	public void testExistsWithIdClass() {
 
 		IdClassExampleDepartment dep = new IdClassExampleDepartment();
@@ -236,13 +225,11 @@ public class RepositoryWithCompositeKeyTests {
 		key.setDepartment(dep.getDepartmentId());
 		key.setEmpId(emp.getEmpId());
 
-		assertThat(employeeRepositoryWithIdClass.exists(key), is(true));
+		assertThat(employeeRepositoryWithIdClass.existsById(key)).isTrue();
+		assertThat(employeeRepositoryWithIdClass.existsById(new IdClassExampleEmployeePK(0L, 0L))).isFalse();
 	}
 
-	/**
-	 * @see DATAJPA-527
-	 */
-	@Test
+	@Test // DATAJPA-527
 	public void testExistsWithEmbeddedId() {
 
 		EmbeddedIdExampleDepartment dep1 = new EmbeddedIdExampleDepartment();
@@ -262,13 +249,10 @@ public class RepositoryWithCompositeKeyTests {
 		key.setDepartmentId(emp.getDepartment().getDepartmentId());
 		key.setEmployeeId(emp.getEmployeePk().getEmployeeId());
 
-		assertThat(employeeRepositoryWithEmbeddedId.exists(key), is(true));
+		assertThat(employeeRepositoryWithEmbeddedId.existsById(key)).isTrue();
 	}
 
-	/**
-	 * @see DATAJPA-611
-	 */
-	@Test
+	@Test // DATAJPA-611
 	public void shouldAllowFindAllWithIdsForEntitiesWithCompoundIdClassKeys() {
 
 		IdClassExampleDepartment dep2 = new IdClassExampleDepartment();
@@ -294,11 +278,50 @@ public class RepositoryWithCompositeKeyTests {
 		emp1PK.setEmpId(3L);
 
 		IdClassExampleEmployeePK emp2PK = new IdClassExampleEmployeePK();
-		emp1PK.setDepartment(1L);
-		emp1PK.setEmpId(2L);
+		emp2PK.setDepartment(1L);
+		emp2PK.setEmpId(2L);
 
-		List<IdClassExampleEmployee> result = employeeRepositoryWithIdClass.findAll(Arrays.asList(emp1PK, emp2PK));
+		List<IdClassExampleEmployee> result = employeeRepositoryWithIdClass.findAllById(Arrays.asList(emp1PK, emp2PK));
 
-		assertThat(result, hasSize(2));
+		assertThat(result).hasSize(2);
+	}
+
+	@Test // DATAJPA-920
+	public void shouldExecuteExistsQueryForEntitiesWithEmbeddedId() {
+
+		EmbeddedIdExampleDepartment dep1 = new EmbeddedIdExampleDepartment();
+		dep1.setDepartmentId(1L);
+		dep1.setName("Dep1");
+
+		EmbeddedIdExampleEmployeePK key = new EmbeddedIdExampleEmployeePK();
+		key.setDepartmentId(1L);
+		key.setEmployeeId(1L);
+
+		EmbeddedIdExampleEmployee emp = new EmbeddedIdExampleEmployee();
+		emp.setDepartment(dep1);
+		emp.setEmployeePk(key);
+		emp.setName("White");
+
+		employeeRepositoryWithEmbeddedId.save(emp);
+
+		assertThat(employeeRepositoryWithEmbeddedId.existsByName(emp.getName())).isTrue();
+	}
+
+	@Test // DATAJPA-920
+	public void shouldExecuteExistsQueryForEntitiesWithCompoundIdClassKeys() {
+
+		IdClassExampleDepartment dep2 = new IdClassExampleDepartment();
+		dep2.setDepartmentId(2L);
+		dep2.setName("Dep2");
+
+		IdClassExampleEmployee emp1 = new IdClassExampleEmployee();
+		emp1.setEmpId(3L);
+		emp1.setDepartment(dep2);
+		emp1.setName("White");
+
+		employeeRepositoryWithIdClass.save(emp1);
+
+		assertThat(employeeRepositoryWithIdClass.existsByName(emp1.getName())).isTrue();
+		assertThat(employeeRepositoryWithIdClass.existsByName("Walter")).isFalse();
 	}
 }

@@ -1,11 +1,11 @@
 /*
- * Copyright 2008-2014 the original author or authors.
+ * Copyright 2008-2019 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
  *
- *      http://www.apache.org/licenses/LICENSE-2.0
+ *      https://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -15,187 +15,92 @@
  */
 package org.springframework.data.jpa.repository.query;
 
-import java.util.Date;
-
 import javax.persistence.Query;
 
-import org.springframework.data.domain.Pageable;
-import org.springframework.data.domain.Sort;
-import org.springframework.data.jpa.repository.query.JpaParameters.JpaParameter;
-import org.springframework.data.repository.query.Parameters;
+import org.springframework.data.jpa.repository.query.QueryParameterSetter.ErrorHandling;
 import org.springframework.util.Assert;
 
 /**
  * {@link ParameterBinder} is used to bind method parameters to a {@link Query}. This is usually done whenever an
  * {@link AbstractJpaQuery} is executed.
- * 
+ *
  * @author Oliver Gierke
  * @author Thomas Darimont
+ * @author Mark Paluch
+ * @author Christoph Strobl
+ * @author Jens Schauder
  */
 public class ParameterBinder {
 
+	static final String PARAMETER_NEEDS_TO_BE_NAMED = "For queries with named parameters you need to use provide names for method parameters. Use @Param for query method parameters, or when on Java 8+ use the javac flag -parameters.";
+
 	private final JpaParameters parameters;
-	private final Object[] values;
+	private final Iterable<QueryParameterSetter> parameterSetters;
+	private final boolean useJpaForPaging;
 
 	/**
-	 * Creates a new {@link ParameterBinder}.
-	 * 
+	 * Creates a new {@link ParameterBinder} for the given {@link JpaParameters} and {@link QueryParameterSetter}s.
+	 * Defaults to use JPA API to apply pagination offsets.
+	 *
 	 * @param parameters must not be {@literal null}.
-	 * @param values must not be {@literal null}.
+	 * @param parameterSetters must not be {@literal null}.
+	 * @since 2.0.6
 	 */
-	public ParameterBinder(JpaParameters parameters, Object[] values) {
+	ParameterBinder(JpaParameters parameters, Iterable<QueryParameterSetter> parameterSetters) {
+		this(parameters, parameterSetters, true);
+	}
 
-		Assert.notNull(parameters);
-		Assert.notNull(values);
+	/**
+	 * Creates a new {@link ParameterBinder} for the given {@link JpaParameters} and {@link QueryParameterSetter}s.
+	 *
+	 * @param parameters must not be {@literal null}.
+	 * @param parameterSetters must not be {@literal null}.
+	 * @param useJpaForPaging determines whether {@link Query#setFirstResult(int)} and {@link Query#setMaxResults(int)}
+	 *          shall be used for paging.
+	 */
+	public ParameterBinder(JpaParameters parameters, Iterable<QueryParameterSetter> parameterSetters,
+			boolean useJpaForPaging) {
 
-		Assert.isTrue(parameters.getNumberOfParameters() == values.length, "Invalid number of parameters given!");
+		Assert.notNull(parameters, "JpaParameters must not be null!");
+		Assert.notNull(parameterSetters, "Parameter setters must not be null!");
 
 		this.parameters = parameters;
-		this.values = values.clone();
+		this.parameterSetters = parameterSetters;
+		this.useJpaForPaging = useJpaForPaging;
 	}
 
-	ParameterBinder(JpaParameters parameters) {
-		this(parameters, new Object[0]);
+	public <T extends Query> T bind(T jpaQuery, QueryParameterSetter.QueryMetadata metadata,
+			JpaParametersParameterAccessor accessor) {
+		bind(metadata.withQuery(jpaQuery), accessor, ErrorHandling.STRICT);
+		return jpaQuery;
 	}
 
-	/**
-	 * Returns the {@link Pageable} of the parameters, if available. Returns {@code null} otherwise.
-	 * 
-	 * @return
-	 */
-	public Pageable getPageable() {
+	public void bind(QueryParameterSetter.BindableQuery query, JpaParametersParameterAccessor accessor,
+			ErrorHandling errorHandling) {
 
-		if (!parameters.hasPageableParameter()) {
-			return null;
-		}
-
-		return (Pageable) values[parameters.getPageableIndex()];
-	}
-
-	/**
-	 * Returns the sort instance to be used for query creation. Will use a {@link Sort} parameter if available or the
-	 * {@link Sort} contained in a {@link Pageable} if available. Returns {@code null} if no {@link Sort} can be found.
-	 * 
-	 * @return
-	 */
-	public Sort getSort() {
-
-		if (parameters.hasSortParameter()) {
-			return (Sort) values[parameters.getSortIndex()];
-		}
-
-		if (parameters.hasPageableParameter() && getPageable() != null) {
-			return getPageable().getSort();
-		}
-
-		return null;
-	}
-
-	/**
-	 * Binds the parameters to the given {@link Query}.
-	 * 
-	 * @param query
-	 * @return
-	 */
-	public <T extends Query> T bind(T query) {
-
-		int methodParameterPosition = 0;
-		int queryParameterPosition = 1;
-
-		for (JpaParameter parameter : parameters) {
-
-			if (canBindParameter(parameter)) {
-
-				Object value = values[methodParameterPosition];
-
-				bind(query, parameter, value, queryParameterPosition++);
-			}
-
-			methodParameterPosition++;
-		}
-
-		return query;
-	}
-
-	/**
-	 * Returns {@literal true} if the given parameter can be bound.
-	 * 
-	 * @param parameter
-	 * @return
-	 */
-	protected boolean canBindParameter(JpaParameter parameter) {
-		return parameter.isBindable();
-	}
-
-	/**
-	 * Perform the actual query parameter binding.
-	 * 
-	 * @param query
-	 * @param parameter
-	 * @param value
-	 * @param position
-	 */
-	protected void bind(Query query, JpaParameter parameter, Object value, int position) {
-
-		if (parameter.isTemporalParameter()) {
-			if (hasNamedParameter(query) && parameter.isNamedParameter()) {
-				query.setParameter(parameter.getName(), (Date) value, parameter.getTemporalType());
-			} else {
-				query.setParameter(position, (Date) value, parameter.getTemporalType());
-			}
-			return;
-		}
-
-		if (hasNamedParameter(query) && parameter.isNamedParameter()) {
-			query.setParameter(parameter.getName(), value);
-		} else {
-			query.setParameter(position, value);
+		for (QueryParameterSetter setter : parameterSetters) {
+			setter.setParameter(query, accessor, errorHandling);
 		}
 	}
 
 	/**
 	 * Binds the parameters to the given query and applies special parameter types (e.g. pagination).
-	 * 
-	 * @param query
-	 * @return
+	 *
+	 * @param query must not be {@literal null}.
+	 * @param values values of method parameters to be assigned to the query parameters.
 	 */
-	public Query bindAndPrepare(Query query) {
-		return bindAndPrepare(query, parameters);
-	}
+	Query bindAndPrepare(Query query, QueryParameterSetter.QueryMetadata metadata,
+			JpaParametersParameterAccessor accessor) {
 
-	boolean hasNamedParameter(Query query) {
-		return QueryUtils.hasNamedParameter(query);
-	}
+		bind(query, metadata, accessor);
 
-	private Query bindAndPrepare(Query query, Parameters<?, ?> parameters) {
-
-		Query result = bind(query);
-
-		if (!parameters.hasPageableParameter() || getPageable() == null) {
-			return result;
+		if (!useJpaForPaging || !parameters.hasPageableParameter() || accessor.getPageable().isUnpaged()) {
+			return query;
 		}
 
-		result.setFirstResult(getPageable().getOffset());
-		result.setMaxResults(getPageable().getPageSize());
+		query.setFirstResult((int) accessor.getPageable().getOffset());
+		query.setMaxResults(accessor.getPageable().getPageSize());
 
-		return result;
-	}
-
-	/**
-	 * Returns the values to bind.
-	 * 
-	 * @return
-	 */
-	Object[] getValues() {
-		return values;
-	}
-
-	/**
-	 * Returns the parameters.
-	 * 
-	 * @return
-	 */
-	JpaParameters getParameters() {
-		return parameters;
+		return query;
 	}
 }

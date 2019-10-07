@@ -1,11 +1,11 @@
 /*
- * Copyright 2008-2014 the original author or authors.
+ * Copyright 2008-2019 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
  *
- *      http://www.apache.org/licenses/LICENSE-2.0
+ *      https://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -15,25 +15,29 @@
  */
 package org.springframework.data.jpa.repository.query;
 
+import static java.util.Collections.*;
 import static javax.persistence.TemporalType.*;
-import static org.hamcrest.Matchers.*;
-import static org.junit.Assert.*;
-import static org.mockito.Matchers.*;
+import static org.mockito.ArgumentMatchers.*;
 import static org.mockito.Mockito.*;
+import static org.mockito.Mockito.any;
 
 import java.lang.reflect.Method;
 import java.util.Date;
 import java.util.List;
+import java.util.Optional;
 
 import javax.persistence.Embeddable;
+import javax.persistence.Parameter;
 import javax.persistence.Query;
 import javax.persistence.TemporalType;
 
 import org.junit.Before;
 import org.junit.Test;
 import org.junit.runner.RunWith;
+import org.mockito.Answers;
 import org.mockito.Mock;
-import org.mockito.runners.MockitoJUnitRunner;
+import org.mockito.junit.MockitoJUnitRunner;
+
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
 import org.springframework.data.jpa.repository.Temporal;
@@ -41,18 +45,20 @@ import org.springframework.data.repository.query.Param;
 
 /**
  * Unit test for {@link ParameterBinder}.
- * 
+ *
  * @author Oliver Gierke
  * @author Thomas Darimont
+ * @author Jens Schauder
+ * @author Mark Paluch
  */
 @RunWith(MockitoJUnitRunner.class)
 public class ParameterBinderUnitTests {
 
+	public static final int MAX_PARAMETERS = 1;
 	private Method valid;
 
-	@Mock private Query query;
+	@Mock(answer = Answers.RETURNS_DEEP_STUBS) private Query query;
 	private Method useIndexedParameters;
-	private Method indexedParametersWithSort;
 
 	@Before
 	public void setUp() throws SecurityException, NoSuchMethodException {
@@ -60,18 +66,17 @@ public class ParameterBinderUnitTests {
 		valid = SampleRepository.class.getMethod("valid", String.class);
 
 		useIndexedParameters = SampleRepository.class.getMethod("useIndexedParameters", String.class);
-		indexedParametersWithSort = SampleRepository.class.getMethod("indexedParameterWithSort", String.class, Sort.class);
+
+		when(query.getParameters().size()).thenReturn(MAX_PARAMETERS);
 	}
 
 	static class User {
 
 	}
 
-	static interface SampleRepository {
+	interface SampleRepository {
 
 		User useIndexedParameters(String lastname);
-
-		User indexedParameterWithSort(String lastname, Sort sort);
 
 		User valid(@Param("username") String username);
 
@@ -86,36 +91,11 @@ public class ParameterBinderUnitTests {
 		User invalidWithTemporalTypeParameter(@Temporal String registerDate);
 
 		List<User> validWithVarArgs(Integer... ids);
-	}
 
-	@Test(expected = IllegalArgumentException.class)
-	public void rejectsToManyParameters() throws Exception {
+		User optionalParameter(Optional<String> name);
 
-		new ParameterBinder(new JpaParameters(valid), new Object[] { "foo", "bar" });
-	}
-
-	@Test(expected = IllegalArgumentException.class)
-	public void rejectsNullParameters() throws Exception {
-
-		new ParameterBinder(new JpaParameters(valid), (Object[]) null);
-	}
-
-	@Test(expected = IllegalArgumentException.class)
-	public void rejectsToLittleParameters() throws SecurityException, NoSuchMethodException {
-
-		JpaParameters parameters = new JpaParameters(valid);
-		new ParameterBinder(parameters);
-	}
-
-	@Test
-	public void returnsNullIfNoPageableWasProvided() throws SecurityException, NoSuchMethodException {
-
-		Method method = SampleRepository.class.getMethod("validWithPageable", String.class, Pageable.class);
-
-		JpaParameters parameters = new JpaParameters(method);
-		ParameterBinder binder = new ParameterBinder(parameters, new Object[] { "foo", null });
-
-		assertThat(binder.getPageable(), is(nullValue()));
+		@org.springframework.data.jpa.repository.Query("select x from User where name = :name")
+		User withQuery(String name, String other);
 	}
 
 	@Test
@@ -123,7 +103,8 @@ public class ParameterBinderUnitTests {
 
 		Method validWithSort = SampleRepository.class.getMethod("validWithSort", String.class, Sort.class);
 
-		new ParameterBinder(new JpaParameters(validWithSort), new Object[] { "foo", null }).bind(query);
+		Object[] values = { "foo", null };
+		bind(validWithSort, values);
 		verify(query).setParameter(eq(1), eq("foo"));
 	}
 
@@ -132,30 +113,33 @@ public class ParameterBinderUnitTests {
 
 		Method validWithPageable = SampleRepository.class.getMethod("validWithPageable", String.class, Pageable.class);
 
-		new ParameterBinder(new JpaParameters(validWithPageable), new Object[] { "foo", null }).bind(query);
+		Object[] values = { "foo", null };
+		bind(validWithPageable, values);
 		verify(query).setParameter(eq(1), eq("foo"));
 	}
 
 	@Test
 	public void usesIndexedParametersIfNoParamAnnotationPresent() throws Exception {
 
-		new ParameterBinder(new JpaParameters(useIndexedParameters), new Object[] { "foo" }).bind(query);
-		verify(query).setParameter(eq(1), anyObject());
+		Object[] values = { "foo" };
+		bind(useIndexedParameters, values);
+		verify(query).setParameter(eq(1), any());
 	}
 
 	@Test
+
 	public void usesParameterNameIfAnnotated() throws Exception {
 
-		when(query.setParameter(eq("username"), anyObject())).thenReturn(query);
-		new ParameterBinder(new JpaParameters(valid), new Object[] { "foo" }) {
+		when(query.setParameter(eq("username"), any())).thenReturn(query);
 
-			@Override
-			boolean hasNamedParameter(Query query) {
+		Parameter parameter = mock(Parameter.class);
+		when(parameter.getName()).thenReturn("username");
+		when(query.getParameters()).thenReturn(singleton(parameter));
 
-				return true;
-			}
-		}.bind(query);
-		verify(query).setParameter(eq("username"), anyObject());
+		Object[] values = { "foo" };
+		bind(valid, values);
+
+		verify(query).setParameter(eq("username"), any());
 	}
 
 	@Test
@@ -165,75 +149,94 @@ public class ParameterBinderUnitTests {
 		JpaParameters parameters = new JpaParameters(method);
 		SampleEmbeddable embeddable = new SampleEmbeddable();
 
-		new ParameterBinder(parameters, new Object[] { embeddable }).bind(query);
+		Object[] values = { embeddable };
+		bind(method, parameters, values);
 
 		verify(query).setParameter(1, embeddable);
 	}
 
-	@Test
-	public void bindsSortForIndexedParameters() throws Exception {
-
-		Sort sort = new Sort("name");
-		ParameterBinder binder = new ParameterBinder(new JpaParameters(indexedParametersWithSort), new Object[] { "name",
-				sort });
-		assertThat(binder.getSort(), is(sort));
-	}
-
-	/**
-	 * @see DATAJPA-107
-	 */
-	@Test
+	@Test // DATAJPA-107
 	public void shouldSetTemporalQueryParameterToDate() throws Exception {
 
 		Method method = SampleRepository.class.getMethod("validWithDefaultTemporalTypeParameter", Date.class);
 		JpaParameters parameters = new JpaParameters(method);
 		Date date = new Date();
 
-		new ParameterBinder(parameters, new Object[] { date }).bind(query);
+		Object[] values = { date };
+		bind(method, parameters, values);
 
 		verify(query).setParameter(eq(1), eq(date), eq(TemporalType.DATE));
 	}
 
-	/**
-	 * @see DATAJPA-107
-	 */
-	@Test
+	@Test // DATAJPA-107
 	public void shouldSetTemporalQueryParameterToTimestamp() throws Exception {
 
 		Method method = SampleRepository.class.getMethod("validWithCustomTemporalTypeParameter", Date.class);
 		JpaParameters parameters = new JpaParameters(method);
 		Date date = new Date();
 
-		new ParameterBinder(parameters, new Object[] { date }).bind(query);
+		Object[] values = { date };
+		bind(method, parameters, values);
 
 		verify(query).setParameter(eq(1), eq(date), eq(TemporalType.TIMESTAMP));
 	}
 
-	/**
-	 * @see DATAJPA-107
-	 */
-	@Test(expected = IllegalArgumentException.class)
+	@Test(expected = IllegalArgumentException.class) // DATAJPA-107
 	public void shouldThrowIllegalArgumentExceptionIfIsAnnotatedWithTemporalParamAndParameterTypeIsNotDate()
 			throws Exception {
 		Method method = SampleRepository.class.getMethod("invalidWithTemporalTypeParameter", String.class);
 
 		JpaParameters parameters = new JpaParameters(method);
-		new ParameterBinder(parameters, new Object[] { "foo", "" });
+		ParameterBinderFactory.createBinder(parameters);
 	}
 
-	/**
-	 * @see DATAJPA-461
-	 * @throws Exception
-	 */
-	@Test
+	@Test // DATAJPA-461
 	public void shouldAllowBindingOfVarArgsAsIs() throws Exception {
 
 		Method method = SampleRepository.class.getMethod("validWithVarArgs", Integer[].class);
 		JpaParameters parameters = new JpaParameters(method);
 		Integer[] ids = new Integer[] { 1, 2, 3 };
-		new ParameterBinder(parameters, new Object[] { ids }).bind(query);
+		Object[] values = { ids };
+		bind(method, parameters, values);
 
 		verify(query).setParameter(eq(1), eq(ids));
+	}
+
+	@Test // DATAJPA-809
+	public void unwrapsOptionalParameter() throws Exception {
+
+		Method method = SampleRepository.class.getMethod("optionalParameter", Optional.class);
+		JpaParameters parameters = new JpaParameters(method);
+
+		Object[] values = { Optional.of("Foo") };
+		bind(method, parameters, values);
+
+		verify(query).setParameter(eq(1), eq("Foo"));
+	}
+
+	@Test // DATAJPA-1172
+	public void doesNotBindExcessParameters() throws Exception {
+
+		Method method = SampleRepository.class.getMethod("withQuery", String.class, String.class);
+
+		Object[] values = { "foo", "superfluous" };
+		bind(method, new JpaParameters(method), values);
+
+		verify(query).setParameter(eq(1), any());
+		verify(query, never()).setParameter(eq(2), any());
+	}
+
+	private void bind(Method method, Object[] values) {
+		bind(method, new JpaParameters(method), values);
+	}
+
+	private void bind(Method method, JpaParameters parameters, Object[] values) {
+		ParameterBinderFactory.createBinder(parameters).bind(QueryParameterSetter.BindableQuery.from(query),
+				getAccessor(method, values), QueryParameterSetter.ErrorHandling.STRICT);
+	}
+
+	private JpaParametersParameterAccessor getAccessor(Method method, Object... values) {
+		return new JpaParametersParameterAccessor(new JpaParameters(method), values);
 	}
 
 	public SampleEntity findByEmbeddable(SampleEmbeddable embeddable) {

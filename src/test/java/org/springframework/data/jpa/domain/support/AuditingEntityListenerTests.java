@@ -1,11 +1,11 @@
 /*
- * Copyright 2008-2013 the original author or authors.
+ * Copyright 2008-2019 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
  *
- *      http://www.apache.org/licenses/LICENSE-2.0
+ *      https://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -15,8 +15,10 @@
  */
 package org.springframework.data.jpa.domain.support;
 
-import static org.hamcrest.CoreMatchers.*;
-import static org.junit.Assert.*;
+import static org.assertj.core.api.Assertions.*;
+
+import java.time.LocalDateTime;
+import java.util.Optional;
 
 import org.junit.Before;
 import org.junit.Test;
@@ -36,8 +38,9 @@ import org.springframework.transaction.annotation.Transactional;
 
 /**
  * Integration test for {@link AuditingEntityListener}.
- * 
+ *
  * @author Oliver Gierke
+ * @author Jens Schauder
  */
 @RunWith(SpringJUnit4ClassRunner.class)
 @ContextConfiguration("classpath:auditing/auditing-entity-listener.xml")
@@ -51,6 +54,18 @@ public class AuditingEntityListenerTests {
 	@Autowired AuditorAwareStub auditorAware;
 
 	AuditableUser user;
+
+	private static void assertDatesSet(Auditable<?, ?, LocalDateTime> auditable) {
+
+		assertThat(auditable.getCreatedDate().isPresent()).isTrue();
+		assertThat(auditable.getLastModifiedDate().isPresent()).isTrue();
+	}
+
+	private static void assertUserIsAuditor(AuditableUser user, Auditable<AuditableUser, ?, LocalDateTime> auditable) {
+
+		assertThat(auditable.getCreatedBy()).isEqualTo(Optional.of(user));
+		assertThat(auditable.getLastModifiedBy()).isEqualTo(Optional.of(user));
+	}
 
 	@Before
 	public void setUp() {
@@ -68,10 +83,7 @@ public class AuditingEntityListenerTests {
 		assertUserIsAuditor(user, user);
 	}
 
-	/**
-	 * @see DATAJPA-303
-	 */
-	@Test
+	@Test // DATAJPA-303
 	public void updatesLastModifiedDates() throws Exception {
 
 		Thread.sleep(200);
@@ -79,7 +91,7 @@ public class AuditingEntityListenerTests {
 
 		user = repository.saveAndFlush(user);
 
-		assertThat(user.getCreatedDate().isBefore(user.getLastModifiedDate()), is(true));
+		assertThat(user.getCreatedDate().get().isBefore(user.getLastModifiedDate().get())).isTrue();
 	}
 
 	@Test
@@ -89,7 +101,9 @@ public class AuditingEntityListenerTests {
 		role.setName("ADMIN");
 
 		user.addRole(role);
-		repository.save(user);
+
+		repository.saveAndFlush(user);
+
 		role = user.getRoles().iterator().next();
 
 		assertDatesSet(user);
@@ -98,27 +112,12 @@ public class AuditingEntityListenerTests {
 		assertUserIsAuditor(user, role);
 	}
 
-	/**
-	 * @see DATAJPA-501
-	 */
-	@Test
+	@Test // DATAJPA-501
 	public void usesAnnotationMetadata() {
 
 		AnnotatedAuditableUser auditableUser = annotatedUserRepository.save(new AnnotatedAuditableUser());
 
-		assertThat(auditableUser.getCreateAt(), is(notNullValue()));
-		assertThat(auditableUser.getLastModifiedBy(), is(notNullValue()));
-	}
-
-	private static void assertDatesSet(Auditable<?, ?> auditable) {
-
-		assertThat(auditable.getCreatedDate(), is(notNullValue()));
-		assertThat(auditable.getLastModifiedDate(), is(notNullValue()));
-	}
-
-	private static void assertUserIsAuditor(AuditableUser user, Auditable<AuditableUser, ?> auditable) {
-
-		assertThat(auditable.getCreatedBy(), is(user));
-		assertThat(auditable.getLastModifiedBy(), is(user));
+		assertThat(auditableUser.getCreateAt()).isNotNull();
+		assertThat(auditableUser.getLastModifiedBy()).isNotNull();
 	}
 }

@@ -1,11 +1,11 @@
 /*
- * Copyright 2012-2015 the original author or authors.
+ * Copyright 2012-2019 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
  *
- *      http://www.apache.org/licenses/LICENSE-2.0
+ *      https://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -27,7 +27,9 @@ import javax.persistence.EntityManagerFactory;
 import org.springframework.beans.factory.FactoryBean;
 import org.springframework.context.annotation.ComponentScan.Filter;
 import org.springframework.context.annotation.Import;
+import org.springframework.context.annotation.Lazy;
 import org.springframework.data.jpa.repository.support.JpaRepositoryFactoryBean;
+import org.springframework.data.repository.config.BootstrapMode;
 import org.springframework.data.repository.config.DefaultRepositoryBaseClass;
 import org.springframework.data.repository.query.QueryLookupStrategy;
 import org.springframework.data.repository.query.QueryLookupStrategy.Key;
@@ -36,7 +38,7 @@ import org.springframework.transaction.PlatformTransactionManager;
 /**
  * Annotation to enable JPA repositories. Will scan the package of the annotated configuration class for Spring Data
  * repositories by default.
- * 
+ *
  * @author Oliver Gierke
  * @author Thomas Darimont
  */
@@ -81,7 +83,7 @@ public @interface EnableJpaRepositories {
 	 * Returns the postfix to be used when looking up custom repository implementations. Defaults to {@literal Impl}. So
 	 * for a repository named {@code PersonRepository} the corresponding implementation class will be looked up scanning
 	 * for {@code PersonRepositoryImpl}.
-	 * 
+	 *
 	 * @return
 	 */
 	String repositoryImplementationPostfix() default "Impl";
@@ -89,7 +91,7 @@ public @interface EnableJpaRepositories {
 	/**
 	 * Configures the location of where to find the Spring Data named queries properties file. Will default to
 	 * {@code META-INF/jpa-named-queries.properties}.
-	 * 
+	 *
 	 * @return
 	 */
 	String namedQueriesLocation() default "";
@@ -97,7 +99,7 @@ public @interface EnableJpaRepositories {
 	/**
 	 * Returns the key of the {@link QueryLookupStrategy} to be used for lookup queries for query methods. Defaults to
 	 * {@link Key#CREATE_IF_NOT_FOUND}.
-	 * 
+	 *
 	 * @return
 	 */
 	Key queryLookupStrategy() default Key.CREATE_IF_NOT_FOUND;
@@ -105,14 +107,14 @@ public @interface EnableJpaRepositories {
 	/**
 	 * Returns the {@link FactoryBean} class to be used for each repository instance. Defaults to
 	 * {@link JpaRepositoryFactoryBean}.
-	 * 
+	 *
 	 * @return
 	 */
 	Class<?> repositoryFactoryBeanClass() default JpaRepositoryFactoryBean.class;
 
 	/**
 	 * Configure the repository base class to be used to create repository proxies for this particular configuration.
-	 * 
+	 *
 	 * @return
 	 * @since 1.9
 	 */
@@ -123,7 +125,7 @@ public @interface EnableJpaRepositories {
 	/**
 	 * Configures the name of the {@link EntityManagerFactory} bean definition to be used to create repositories
 	 * discovered through this annotation. Defaults to {@code entityManagerFactory}.
-	 * 
+	 *
 	 * @return
 	 */
 	String entityManagerFactoryRef() default "entityManagerFactory";
@@ -131,7 +133,7 @@ public @interface EnableJpaRepositories {
 	/**
 	 * Configures the name of the {@link PlatformTransactionManager} bean definition to be used to create repositories
 	 * discovered through this annotation. Defaults to {@code transactionManager}.
-	 * 
+	 *
 	 * @return
 	 */
 	String transactionManagerRef() default "transactionManager";
@@ -146,8 +148,30 @@ public @interface EnableJpaRepositories {
 	 * Configures whether to enable default transactions for Spring Data JPA repositories. Defaults to {@literal true}. If
 	 * disabled, repositories must be used behind a facade that's configuring transactions (e.g. using Spring's annotation
 	 * driven transaction facilities) or repository methods have to be used to demarcate transactions.
-	 * 
+	 *
 	 * @return whether to enable default transactions, defaults to {@literal true}.
 	 */
 	boolean enableDefaultTransactions() default true;
+
+	/**
+	 * Configures when the repositories are initialized in the bootstrap lifecycle. {@link BootstrapMode#DEFAULT}
+	 * (default) means eager initialization except all repository interfaces annotated with {@link Lazy},
+	 * {@link BootstrapMode#LAZY} means lazy by default including injection of lazy-initialization proxies into client
+	 * beans so that those can be instantiated but will only trigger the initialization upon first repository usage (i.e a
+	 * method invocation on it). This means repositories can still be uninitialized when the application context has
+	 * completed its bootstrap. {@link BootstrapMode#DEFERRED} is fundamentally the same as {@link BootstrapMode#LAZY},
+	 * but triggers repository initialization when the application context finishes its bootstrap.
+	 * 
+	 * @return
+	 * @since 2.1
+	 */
+	BootstrapMode bootstrapMode() default BootstrapMode.DEFAULT;
+
+	/**
+	 * Configures what character is used to escape the wildcards {@literal _} and {@literal %} in derived queries with
+	 * {@literal contains}, {@literal startsWith} or {@literal endsWith} clauses.
+	 * 
+	 * @return a single character used for escaping.
+	 */
+	char escapeCharacter() default '\\';
 }

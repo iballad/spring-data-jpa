@@ -1,11 +1,11 @@
 /*
- * Copyright 2008-2011 the original author or authors.
+ * Copyright 2008-2019 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
  *
- *      http://www.apache.org/licenses/LICENSE-2.0
+ *      https://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -15,7 +15,7 @@
  */
 package org.springframework.data.jpa.repository.query;
 
-import static org.mockito.Matchers.*;
+import static org.mockito.ArgumentMatchers.*;
 import static org.mockito.Mockito.*;
 import static org.springframework.data.jpa.support.EntityManagerTestUtils.*;
 
@@ -35,11 +35,11 @@ import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.springframework.data.jpa.domain.sample.User;
 import org.springframework.data.jpa.provider.PersistenceProvider;
-import org.springframework.data.jpa.provider.QueryExtractor;
 import org.springframework.data.jpa.repository.EntityGraph;
 import org.springframework.data.jpa.repository.EntityGraph.EntityGraphType;
 import org.springframework.data.jpa.repository.Lock;
 import org.springframework.data.jpa.repository.QueryHints;
+import org.springframework.data.projection.SpelAwareProxyProjectionFactory;
 import org.springframework.data.repository.Repository;
 import org.springframework.data.repository.core.support.DefaultRepositoryMetadata;
 import org.springframework.test.context.ContextConfiguration;
@@ -48,9 +48,10 @@ import org.springframework.transaction.annotation.Transactional;
 
 /**
  * Integration test for {@link AbstractJpaQuery}.
- * 
+ *
  * @author Oliver Gierke
  * @author Thomas Darimont
+ * @author Mark Paluch
  */
 @RunWith(SpringJUnit4ClassRunner.class)
 @ContextConfiguration("classpath:infrastructure.xml")
@@ -68,108 +69,90 @@ public class AbstractJpaQueryTests {
 		countQuery = mock(TypedQuery.class);
 	}
 
-	/**
-	 * @see DATADOC-97
-	 * @throws Exception
-	 */
-	@Test
+	@Test // DATADOC-97
 	public void addsHintsToQueryObject() throws Exception {
 
-		Method method = SampleRepository.class.getMethod("findByLastname", String.class);
-		QueryExtractor provider = PersistenceProvider.fromEntityManager(em);
-		JpaQueryMethod queryMethod = new JpaQueryMethod(method, new DefaultRepositoryMetadata(SampleRepository.class),
-				provider);
+		JpaQueryMethod queryMethod = getMethod("findByLastname", String.class);
 
 		AbstractJpaQuery jpaQuery = new DummyJpaQuery(queryMethod, em);
 
-		Query result = jpaQuery.createQuery(new Object[] { "Matthews" });
+		Query result = jpaQuery
+				.createQuery(new JpaParametersParameterAccessor(queryMethod.getParameters(), new Object[] { "Matthews" }));
 		verify(result).setHint("foo", "bar");
 
-		result = jpaQuery.createCountQuery(new Object[] { "Matthews" });
+		result = jpaQuery
+				.createCountQuery(new JpaParametersParameterAccessor(queryMethod.getParameters(), new Object[] { "Matthews" }));
 		verify(result).setHint("foo", "bar");
 	}
 
-	/**
-	 * @see DATAJPA-54
-	 * @throws Exception
-	 */
-	@Test
+	@Test // DATAJPA-54
 	public void skipsHintsForCountQueryIfConfigured() throws Exception {
 
-		Method method = SampleRepository.class.getMethod("findByFirstname", String.class);
-		QueryExtractor provider = PersistenceProvider.fromEntityManager(em);
-		JpaQueryMethod queryMethod = new JpaQueryMethod(method, new DefaultRepositoryMetadata(SampleRepository.class),
-				provider);
-
+		JpaQueryMethod queryMethod = getMethod("findByFirstname", String.class);
 		AbstractJpaQuery jpaQuery = new DummyJpaQuery(queryMethod, em);
 
-		Query result = jpaQuery.createQuery(new Object[] { "Dave" });
+		Query result = jpaQuery
+				.createQuery(new JpaParametersParameterAccessor(queryMethod.getParameters(), new Object[] { "Dave" }));
 		verify(result).setHint("bar", "foo");
 
-		result = jpaQuery.createCountQuery(new Object[] { "Dave" });
+		result = jpaQuery
+				.createCountQuery(new JpaParametersParameterAccessor(queryMethod.getParameters(), new Object[] { "Dave" }));
 		verify(result, never()).setHint("bar", "foo");
 	}
 
-	/**
-	 * @see DATAJPA-73
-	 */
-	@Test
+	@Test // DATAJPA-73
 	public void addsLockingModeToQueryObject() throws Exception {
 
 		when(query.setLockMode(any(LockModeType.class))).thenReturn(query);
 
-		Method method = SampleRepository.class.getMethod("findOneLocked", Integer.class);
-		QueryExtractor provider = PersistenceProvider.fromEntityManager(em);
-		JpaQueryMethod queryMethod = new JpaQueryMethod(method, new DefaultRepositoryMetadata(SampleRepository.class),
-				provider);
+		JpaQueryMethod queryMethod = getMethod("findOneLocked", Integer.class);
 
 		AbstractJpaQuery jpaQuery = new DummyJpaQuery(queryMethod, em);
-		Query result = jpaQuery.createQuery(new Object[] { Integer.valueOf(1) });
+		Query result = jpaQuery.createQuery(
+				new JpaParametersParameterAccessor(queryMethod.getParameters(), new Object[] { Integer.valueOf(1) }));
 		verify(result).setLockMode(LockModeType.PESSIMISTIC_WRITE);
 	}
 
-	/**
-	 * @see DATAJPA-466
-	 */
-	@Test
+	@Test // DATAJPA-466
 	@Transactional
 	public void shouldAddEntityGraphHintForFetch() throws Exception {
 
 		Assume.assumeTrue(currentEntityManagerIsAJpa21EntityManager(em));
 
-		Method findAllMethod = SampleRepository.class.getMethod("findAll");
-		QueryExtractor provider = PersistenceProvider.fromEntityManager(em);
-		JpaQueryMethod queryMethod = new JpaQueryMethod(findAllMethod,
-				new DefaultRepositoryMetadata(SampleRepository.class), provider);
+		JpaQueryMethod queryMethod = getMethod("findAll");
 
 		javax.persistence.EntityGraph<?> entityGraph = em.getEntityGraph("User.overview");
 
 		AbstractJpaQuery jpaQuery = new DummyJpaQuery(queryMethod, em);
-		Query result = jpaQuery.createQuery(new Object[0]);
+		Query result = jpaQuery.createQuery(new JpaParametersParameterAccessor(queryMethod.getParameters(), new Object[0]));
 
 		verify(result).setHint("javax.persistence.fetchgraph", entityGraph);
 	}
 
-	/**
-	 * @see DATAJPA-466
-	 */
-	@Test
+	@Test // DATAJPA-466
 	@Transactional
 	public void shouldAddEntityGraphHintForLoad() throws Exception {
 
 		Assume.assumeTrue(currentEntityManagerIsAJpa21EntityManager(em));
 
-		Method getByIdMethod = SampleRepository.class.getMethod("getById", Integer.class);
-		QueryExtractor provider = PersistenceProvider.fromEntityManager(em);
-		JpaQueryMethod queryMethod = new JpaQueryMethod(getByIdMethod,
-				new DefaultRepositoryMetadata(SampleRepository.class), provider);
+		JpaQueryMethod queryMethod = getMethod("getById", Integer.class);
 
 		javax.persistence.EntityGraph<?> entityGraph = em.getEntityGraph("User.detail");
 
 		AbstractJpaQuery jpaQuery = new DummyJpaQuery(queryMethod, em);
-		Query result = jpaQuery.createQuery(new Object[] { 1 });
+		Query result = jpaQuery
+				.createQuery(new JpaParametersParameterAccessor(queryMethod.getParameters(), new Object[] { 1 }));
 
 		verify(result).setHint("javax.persistence.loadgraph", entityGraph);
+	}
+
+	private JpaQueryMethod getMethod(String name, Class<?>... parameterTypes) throws Exception {
+
+		Method method = SampleRepository.class.getMethod(name, parameterTypes);
+		PersistenceProvider persistenceProvider = PersistenceProvider.fromEntityManager(em);
+
+		return new JpaQueryMethod(method, new DefaultRepositoryMetadata(SampleRepository.class),
+				new SpelAwareProxyProjectionFactory(), persistenceProvider);
 	}
 
 	interface SampleRepository extends Repository<User, Integer> {
@@ -184,15 +167,11 @@ public class AbstractJpaQueryTests {
 		@org.springframework.data.jpa.repository.Query("select u from User u where u.id = ?1")
 		List<User> findOneLocked(Integer primaryKey);
 
-		/**
-		 * @see DATAJPA-466
-		 */
+		// DATAJPA-466
 		@EntityGraph(value = "User.detail", type = EntityGraphType.LOAD)
 		User getById(Integer id);
 
-		/**
-		 * @see DATAJPA-466
-		 */
+		// DATAJPA-466
 		@EntityGraph("User.overview")
 		List<User> findAll();
 	}
@@ -204,12 +183,12 @@ public class AbstractJpaQueryTests {
 		}
 
 		@Override
-		protected Query doCreateQuery(Object[] values) {
+		protected Query doCreateQuery(JpaParametersParameterAccessor accessor) {
 			return query;
 		}
 
 		@Override
-		protected TypedQuery<Long> doCreateCountQuery(Object[] values) {
+		protected TypedQuery<Long> doCreateCountQuery(JpaParametersParameterAccessor accessor) {
 			return (TypedQuery<Long>) countQuery;
 		}
 	}

@@ -1,11 +1,11 @@
 /*
- * Copyright 2013-2014 the original author or authors.
+ * Copyright 2013-2019 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
  *
- *      http://www.apache.org/licenses/LICENSE-2.0
+ *      https://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -17,13 +17,15 @@ package org.springframework.data.jpa.repository.query;
 
 import javax.persistence.Entity;
 
+import org.springframework.core.annotation.AnnotatedElementUtils;
 import org.springframework.util.Assert;
 import org.springframework.util.StringUtils;
 
 /**
  * Default implementation for {@link JpaEntityMetadata}.
- * 
+ *
  * @author Oliver Gierke
+ * @author Christoph Strobl
  */
 public class DefaultJpaEntityMetadata<T> implements JpaEntityMetadata<T> {
 
@@ -31,7 +33,7 @@ public class DefaultJpaEntityMetadata<T> implements JpaEntityMetadata<T> {
 
 	/**
 	 * Creates a new {@link DefaultJpaEntityMetadata} for the given domain type.
-	 * 
+	 *
 	 * @param domainType must not be {@literal null}.
 	 */
 	public DefaultJpaEntityMetadata(Class<T> domainType) {
@@ -40,7 +42,7 @@ public class DefaultJpaEntityMetadata<T> implements JpaEntityMetadata<T> {
 		this.domainType = domainType;
 	}
 
-	/* 
+	/*
 	 * (non-Javadoc)
 	 * @see org.springframework.data.repository.core.EntityMetadata#getJavaType()
 	 */
@@ -53,11 +55,10 @@ public class DefaultJpaEntityMetadata<T> implements JpaEntityMetadata<T> {
 	 * (non-Javadoc)
 	 * @see org.springframework.data.jpa.repository.support.JpaEntityMetadata#getEntityName()
 	 */
+	@Override
 	public String getEntityName() {
 
-		Entity entity = domainType.getAnnotation(Entity.class);
-		boolean hasName = null != entity && StringUtils.hasText(entity.name());
-
-		return hasName ? entity.name() : domainType.getSimpleName();
+		Entity entity = AnnotatedElementUtils.findMergedAnnotation(domainType, Entity.class);
+		return null != entity && StringUtils.hasText(entity.name()) ? entity.name() : domainType.getSimpleName();
 	}
 }

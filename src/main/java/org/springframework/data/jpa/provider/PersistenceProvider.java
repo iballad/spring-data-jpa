@@ -1,11 +1,11 @@
 /*
- * Copyright 2008-2016 the original author or authors.
+ * Copyright 2008-2019 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
  *
- *      http://www.apache.org/licenses/LICENSE-2.0
+ *      https://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -18,56 +18,48 @@ package org.springframework.data.jpa.provider;
 import static org.springframework.data.jpa.provider.JpaClassUtils.*;
 import static org.springframework.data.jpa.provider.PersistenceProvider.Constants.*;
 
-import java.lang.reflect.Method;
-import java.util.Arrays;
 import java.util.Collection;
 import java.util.Collections;
-import java.util.Iterator;
-import java.util.List;
+import java.util.NoSuchElementException;
 
 import javax.persistence.EntityManager;
 import javax.persistence.Query;
 import javax.persistence.metamodel.Metamodel;
 
-import org.apache.openjpa.enhance.PersistenceCapable;
-import org.apache.openjpa.persistence.OpenJPAPersistence;
-import org.apache.openjpa.persistence.OpenJPAQuery;
-import org.apache.openjpa.persistence.jdbc.FetchDirection;
-import org.apache.openjpa.persistence.jdbc.JDBCFetchPlan;
-import org.apache.openjpa.persistence.jdbc.LRSSizeAlgorithm;
-import org.apache.openjpa.persistence.jdbc.ResultSetType;
 import org.eclipse.persistence.jpa.JpaQuery;
 import org.eclipse.persistence.queries.ScrollableCursor;
 import org.hibernate.ScrollMode;
 import org.hibernate.ScrollableResults;
 import org.hibernate.proxy.HibernateProxy;
 import org.springframework.data.util.CloseableIterator;
+import org.springframework.lang.Nullable;
 import org.springframework.transaction.support.TransactionSynchronizationManager;
 import org.springframework.util.Assert;
-import org.springframework.util.ClassUtils;
 import org.springframework.util.ConcurrentReferenceHashMap;
-import org.springframework.util.ReflectionUtils;
 
 /**
  * Enumeration representing persistence providers to be used.
- * 
+ *
  * @author Oliver Gierke
  * @author Thomas Darimont
+ * @author Mark Paluch
+ * @author Jens Schauder
  */
-public enum PersistenceProvider implements QueryExtractor,ProxyIdAccessor {
+public enum PersistenceProvider implements QueryExtractor, ProxyIdAccessor {
 
 	/**
 	 * Hibernate persistence provider.
 	 * <p>
 	 * Since Hibernate 4.3 the location of the HibernateEntityManager moved to the org.hibernate.jpa package. In order to
 	 * support both locations we interpret both classnames as a Hibernate {@code PersistenceProvider}.
-	 * 
-	 * @see DATAJPA-444
+	 *
+	 * @see <a href="https://jira.spring.io/browse/DATAJPA-444">DATAJPA-444</a>
 	 */
 	HIBERNATE(//
-			Arrays.asList(HIBERNATE43_ENTITY_MANAGER_INTERFACE, HIBERNATE_ENTITY_MANAGER_INTERFACE), //
-			Arrays.asList(HIBERNATE43_JPA_METAMODEL_TYPE, HIBERNATE_JPA_METAMODEL_TYPE)) {
+			Collections.singletonList(HIBERNATE_ENTITY_MANAGER_INTERFACE), //
+			Collections.singletonList(HIBERNATE_JPA_METAMODEL_TYPE)) {
 
+		@Override
 		public String extractQueryString(Query query) {
 			return HibernateUtils.getHibernateQuery(query);
 		}
@@ -75,16 +67,16 @@ public enum PersistenceProvider implements QueryExtractor,ProxyIdAccessor {
 		/**
 		 * Return custom placeholder ({@code *}) as Hibernate does create invalid queries for count queries for objects with
 		 * compound keys.
-		 * 
-		 * @see HHH-4044
-		 * @see HHH-3096
+		 *
+		 * @see <a href="https://hibernate.atlassian.net/browse/HHH-4044">HHH-4044</a>
+		 * @see <a href="https://hibernate.atlassian.net/browse/HHH-3096">HHH-3096</a>
 		 */
 		@Override
 		public String getCountQueryPlaceholder() {
 			return "*";
 		}
 
-		/* 
+		/*
 		 * (non-Javadoc)
 		 * @see org.springframework.data.jpa.repository.support.ProxyIdAccessor#isProxy(java.lang.Object)
 		 */
@@ -93,7 +85,7 @@ public enum PersistenceProvider implements QueryExtractor,ProxyIdAccessor {
 			return entity instanceof HibernateProxy;
 		}
 
-		/* 
+		/*
 		 * (non-Javadoc)
 		 * @see org.springframework.data.jpa.repository.support.ProxyIdAccessor#getIdentifierFrom(java.lang.Object)
 		 */
@@ -102,12 +94,13 @@ public enum PersistenceProvider implements QueryExtractor,ProxyIdAccessor {
 			return ((HibernateProxy) entity).getHibernateLazyInitializer().getIdentifier();
 		}
 
-		/* 
+		/*
 		 * (non-Javadoc)
 		 * @see org.springframework.data.jpa.provider.PersistenceProvider#potentiallyConvertEmptyCollection(java.util.Collection)
 		 */
+		@Nullable
 		@Override
-		public <T> Collection<T> potentiallyConvertEmptyCollection(Collection<T> collection) {
+		public <T> Collection<T> potentiallyConvertEmptyCollection(@Nullable Collection<T> collection) {
 			return collection == null || collection.isEmpty() ? null : collection;
 		}
 
@@ -127,11 +120,12 @@ public enum PersistenceProvider implements QueryExtractor,ProxyIdAccessor {
 	ECLIPSELINK(Collections.singleton(ECLIPSELINK_ENTITY_MANAGER_INTERFACE),
 			Collections.singleton(ECLIPSELINK_JPA_METAMODEL_TYPE)) {
 
+		@Override
 		public String extractQueryString(Query query) {
 			return ((JpaQuery<?>) query).getDatabaseQuery().getJPQLString();
 		}
 
-		/* 
+		/*
 		 * (non-Javadoc)
 		 * @see org.springframework.data.jpa.repository.support.ProxyIdAccessor#isProxy(java.lang.Object)
 		 */
@@ -140,20 +134,23 @@ public enum PersistenceProvider implements QueryExtractor,ProxyIdAccessor {
 			return false;
 		}
 
-		/* 
+		/*
 		 * (non-Javadoc)
 		 * @see org.springframework.data.jpa.repository.support.ProxyIdAccessor#getIdentifierFrom(java.lang.Object)
 		 */
+		@Nullable
 		@Override
 		public Object getIdentifierFrom(Object entity) {
 			return null;
 		}
 
-		/* (non-Javadoc)
+		/*
+		 * (non-Javadoc)
 		 * @see org.springframework.data.jpa.provider.PersistenceProvider#potentiallyConvertEmptyCollection(java.util.Collection)
 		 */
+		@Nullable
 		@Override
-		public <T> Collection<T> potentiallyConvertEmptyCollection(Collection<T> collection) {
+		public <T> Collection<T> potentiallyConvertEmptyCollection(@Nullable Collection<T> collection) {
 			return collection == null || collection.isEmpty() ? null : collection;
 		}
 
@@ -163,61 +160,20 @@ public enum PersistenceProvider implements QueryExtractor,ProxyIdAccessor {
 		 */
 		@Override
 		public CloseableIterator<Object> executeQueryWithResultStream(Query jpaQuery) {
-			return new EclipseLinkScrollableResultsIterator<Object>(jpaQuery);
-		}
-	},
-
-	/**
-	 * OpenJpa persistence provider.
-	 */
-	OPEN_JPA(Collections.singleton(OPENJPA_ENTITY_MANAGER_INTERFACE), Collections.singleton(OPENJPA_JPA_METAMODEL_TYPE)) {
-
-		/*
-		 * (non-Javadoc)
-		 * @see org.springframework.data.jpa.repository.query.QueryExtractor#extractQueryString(javax.persistence.Query)
-		 */
-		@Override
-		public String extractQueryString(Query query) {
-			return ((OpenJPAQuery<?>) query).getQueryString();
-		}
-
-		/* 
-		 * (non-Javadoc)
-		 * @see org.springframework.data.jpa.repository.support.ProxyIdAccessor#isProxy(java.lang.Object)
-		 */
-		@Override
-		public boolean shouldUseAccessorFor(Object entity) {
-			return entity instanceof PersistenceCapable;
-		}
-
-		/* 
-		 * (non-Javadoc)
-		 * @see org.springframework.data.jpa.repository.support.ProxyIdAccessor#getIdentifierFrom(java.lang.Object)
-		 */
-		@Override
-		public Object getIdentifierFrom(Object entity) {
-			return ((PersistenceCapable) entity).pcFetchObjectId();
-		}
-
-		/*
-		 * (non-Javadoc)
-		 * @see org.springframework.data.jpa.provider.PersistenceProvider#executeQueryWithResultStream(javax.persistence.Query)
-		 */
-		@Override
-		public CloseableIterator<Object> executeQueryWithResultStream(Query jpaQuery) {
-			return new OpenJpaResultStreamingIterator<Object>(jpaQuery);
+			return new EclipseLinkScrollableResultsIterator<>(jpaQuery);
 		}
 	},
 
 	/**
 	 * Unknown special provider. Use standard JPA.
 	 */
-	GENERIC_JPA(Collections.singleton(GENERIC_JPA_ENTITY_MANAGER_INTERFACE), Collections.<String> emptySet()) {
+	GENERIC_JPA(Collections.singleton(GENERIC_JPA_ENTITY_MANAGER_INTERFACE), Collections.emptySet()) {
 
 		/*
 		 * (non-Javadoc)
 		 * @see org.springframework.data.jpa.repository.query.QueryExtractor#extractQueryString(javax.persistence.Query)
 		 */
+		@Nullable
 		@Override
 		public String extractQueryString(Query query) {
 			return null;
@@ -232,7 +188,7 @@ public enum PersistenceProvider implements QueryExtractor,ProxyIdAccessor {
 			return false;
 		}
 
-		/* 
+		/*
 		 * (non-Javadoc)
 		 * @see org.springframework.data.jpa.repository.support.ProxyIdAccessor#isProxy(java.lang.Object)
 		 */
@@ -241,56 +197,51 @@ public enum PersistenceProvider implements QueryExtractor,ProxyIdAccessor {
 			return false;
 		}
 
-		/* 
+		/*
 		 * (non-Javadoc)
 		 * @see org.springframework.data.jpa.repository.support.ProxyIdAccessor#getIdentifierFrom(java.lang.Object)
 		 */
+		@Nullable
 		@Override
 		public Object getIdentifierFrom(Object entity) {
 			return null;
 		}
 	};
 
-	/**
-	 * Holds the PersistenceProvider specific interface names.
-	 * 
-	 * @author Thomas Darimont
-	 */
-	static interface Constants {
-
-		String GENERIC_JPA_ENTITY_MANAGER_INTERFACE = "javax.persistence.EntityManager";
-		String OPENJPA_ENTITY_MANAGER_INTERFACE = "org.apache.openjpa.persistence.OpenJPAEntityManager";
-		String ECLIPSELINK_ENTITY_MANAGER_INTERFACE = "org.eclipse.persistence.jpa.JpaEntityManager";
-		String HIBERNATE_ENTITY_MANAGER_INTERFACE = "org.hibernate.ejb.HibernateEntityManager";
-		String HIBERNATE43_ENTITY_MANAGER_INTERFACE = "org.hibernate.jpa.HibernateEntityManager";
-
-		String HIBERNATE_JPA_METAMODEL_TYPE = "org.hibernate.ejb.metamodel.MetamodelImpl";
-		String HIBERNATE43_JPA_METAMODEL_TYPE = "org.hibernate.jpa.internal.metamodel.MetamodelImpl";
-		String ECLIPSELINK_JPA_METAMODEL_TYPE = "org.eclipse.persistence.internal.jpa.metamodel.MetamodelImpl";
-		String OPENJPA_JPA_METAMODEL_TYPE = "org.apache.openjpa.persistence.meta.MetamodelImpl";
-	}
-
-	private static ConcurrentReferenceHashMap<Class<?>, PersistenceProvider> CACHE = new ConcurrentReferenceHashMap<Class<?>, PersistenceProvider>();
-
-	private final Iterable<String> entityManagerClassNames;
-	private final Iterable<String> metamodelClassNames;
+	static ConcurrentReferenceHashMap<Class<?>, PersistenceProvider> CACHE = new ConcurrentReferenceHashMap<>();
 
 	/**
 	 * Creates a new {@link PersistenceProvider}.
-	 * 
+	 *
 	 * @param entityManagerClassNames the names of the provider specific {@link EntityManager} implementations. Must not
 	 *          be {@literal null} or empty.
+	 * @param metamodelClassNames must not be {@literal null}.
 	 */
-	private PersistenceProvider(Iterable<String> entityManagerClassNames, Iterable<String> metamodelClassNames) {
+	PersistenceProvider(Iterable<String> entityManagerClassNames, Iterable<String> metamodelClassNames) {
 
 		this.entityManagerClassNames = entityManagerClassNames;
 		this.metamodelClassNames = metamodelClassNames;
 	}
 
+	private final Iterable<String> entityManagerClassNames;
+	private final Iterable<String> metamodelClassNames;
+
+	/**
+	 * Caches the given {@link PersistenceProvider} for the given source type.
+	 *
+	 * @param type must not be {@literal null}.
+	 * @param provider must not be {@literal null}.
+	 * @return the {@code PersistenceProvider} passed in as an argument. Guaranteed to be not {@code null}.
+	 */
+	private static PersistenceProvider cacheAndReturn(Class<?> type, PersistenceProvider provider) {
+		CACHE.put(type, provider);
+		return provider;
+	}
+
 	/**
 	 * Determines the {@link PersistenceProvider} from the given {@link EntityManager}. If no special one can be
 	 * determined {@link #GENERIC_JPA} will be returned.
-	 * 
+	 *
 	 * @param em must not be {@literal null}.
 	 * @return will never be {@literal null}.
 	 */
@@ -319,7 +270,7 @@ public enum PersistenceProvider implements QueryExtractor,ProxyIdAccessor {
 	/**
 	 * Determines the {@link PersistenceProvider} from the given {@link Metamodel}. If no special one can be determined
 	 * {@link #GENERIC_JPA} will be returned.
-	 * 
+	 *
 	 * @param metamodel must not be {@literal null}.
 	 * @return will never be {@literal null}.
 	 */
@@ -346,47 +297,51 @@ public enum PersistenceProvider implements QueryExtractor,ProxyIdAccessor {
 	}
 
 	/**
-	 * Caches the given {@link PersistenceProvider} for the given source type.
-	 * 
-	 * @param type must not be {@literal null}.
-	 * @param provider must not be {@literal null}.
-	 * @return
-	 */
-	private static PersistenceProvider cacheAndReturn(Class<?> type, PersistenceProvider provider) {
-		CACHE.put(type, provider);
-		return provider;
-	}
-
-	/*
-	 * (non-Javadoc)
-	 * 
-	 * @see
-	 * org.springframework.data.jpa.repository.query.QueryExtractor#canExtractQuery
-	 * ()
-	 */
-	public boolean canExtractQuery() {
-		return true;
-	}
-
-	/**
-	 * Returns the placeholder to be used for simple count queries. Default implementation returns {@code *}.
-	 * 
-	 * @return
+	 * Returns the placeholder to be used for simple count queries. Default implementation returns {@code x}.
+	 *
+	 * @return a placeholder for count queries. Guaranteed to be not {@code null}.
 	 */
 	public String getCountQueryPlaceholder() {
 		return "x";
 	}
 
+	/*
+	 * (non-Javadoc)
+	 * @see org.springframework.data.jpa.repository.query.QueryExtractor#canExtractQuery()
+	 */
+	@Override
+	public boolean canExtractQuery() {
+		return true;
+	}
+
 	/**
 	 * Potentially converts an empty collection to the appropriate representation of this {@link PersistenceProvider},
 	 * since some JPA providers cannot correctly handle empty collections.
-	 * 
-	 * @see DATAJPA-606
-	 * @param collection
-	 * @return
+	 *
+	 * @see <a href="https://jira.spring.io/browse/DATAJPA-606">DATAJPA-606</a>
+	 * @param collection The collection to be converted. May be {@code null}.
+	 * @return a potentially converted collection. May be {@code null}.
 	 */
-	public <T> Collection<T> potentiallyConvertEmptyCollection(Collection<T> collection) {
+	@Nullable
+	public <T> Collection<T> potentiallyConvertEmptyCollection(@Nullable Collection<T> collection) {
 		return collection;
+	}
+
+	/**
+	 * Holds the PersistenceProvider specific interface names.
+	 *
+	 * @author Thomas Darimont
+	 * @author Jens Schauder
+	 */
+	interface Constants {
+
+		String GENERIC_JPA_ENTITY_MANAGER_INTERFACE = "javax.persistence.EntityManager";
+		String ECLIPSELINK_ENTITY_MANAGER_INTERFACE = "org.eclipse.persistence.jpa.JpaEntityManager";
+		// needed as Spring only exposes that interface via the EM proxy
+		String HIBERNATE_ENTITY_MANAGER_INTERFACE = "org.hibernate.jpa.HibernateEntityManager";
+
+		String HIBERNATE_JPA_METAMODEL_TYPE = "org.hibernate.metamodel.internal.MetamodelImpl";
+		String ECLIPSELINK_JPA_METAMODEL_TYPE = "org.eclipse.persistence.internal.jpa.metamodel.MetamodelImpl";
 	}
 
 	public CloseableIterator<Object> executeQueryWithResultStream(Query jpaQuery) {
@@ -396,41 +351,25 @@ public enum PersistenceProvider implements QueryExtractor,ProxyIdAccessor {
 
 	/**
 	 * {@link CloseableIterator} for Hibernate.
-	 * 
+	 *
 	 * @author Thomas Darimont
 	 * @author Oliver Gierke
-	 * @param <T> the domain type to return≠
 	 * @since 1.8
 	 */
 	private static class HibernateScrollableResultsIterator implements CloseableIterator<Object> {
 
-		private static final Method READ_ONLY_METHOD = ClassUtils.getMethod(org.hibernate.Query.class, "setReadOnly",
-				boolean.class);
-		private static final Method SCROLL_METHOD = ClassUtils.getMethod(READ_ONLY_METHOD.getReturnType(), "scroll",
-				ScrollMode.class);
-
-		private final ScrollableResults scrollableResults;
+		private final @Nullable ScrollableResults scrollableResults;
 
 		/**
 		 * Creates a new {@link HibernateScrollableResultsIterator} for the given {@link Query}.
-		 * 
+		 *
 		 * @param jpaQuery must not be {@literal null}.
 		 */
-		public HibernateScrollableResultsIterator(Query jpaQuery) {
+		HibernateScrollableResultsIterator(Query jpaQuery) {
 
-			org.hibernate.Query query = jpaQuery.unwrap(org.hibernate.Query.class);
-			boolean isReadOnly = TransactionSynchronizationManager.isCurrentTransactionReadOnly();
-
-			if (READ_ONLY_METHOD.getReturnType().equals(org.hibernate.Query.class)) {
-
-				this.scrollableResults = query.setReadOnly(isReadOnly).scroll(ScrollMode.FORWARD_ONLY);
-
-			} else {
-
-				Object intermediate = ReflectionUtils.invokeMethod(READ_ONLY_METHOD, jpaQuery, isReadOnly);
-				this.scrollableResults = (ScrollableResults) ReflectionUtils.invokeMethod(SCROLL_METHOD, intermediate,
-						ScrollMode.FORWARD_ONLY);
-			}
+			org.hibernate.query.Query<?> query = jpaQuery.unwrap(org.hibernate.query.Query.class);
+			this.scrollableResults = query.setReadOnly(TransactionSynchronizationManager.isCurrentTransactionReadOnly())//
+					.scroll(ScrollMode.FORWARD_ONLY);
 		}
 
 		/*
@@ -440,7 +379,12 @@ public enum PersistenceProvider implements QueryExtractor,ProxyIdAccessor {
 		@Override
 		public Object next() {
 
-			Object[] row = scrollableResults.get();
+			if (scrollableResults == null) {
+				throw new NoSuchElementException("No ScrollableResults");
+			}
+
+			// Cast needed for Hibernate 6 compatibility
+			Object[] row = (Object[]) scrollableResults.get();
 
 			return row.length == 1 ? row[0] : row;
 		}
@@ -451,7 +395,7 @@ public enum PersistenceProvider implements QueryExtractor,ProxyIdAccessor {
 		 */
 		@Override
 		public boolean hasNext() {
-			return scrollableResults == null ? false : scrollableResults.next();
+			return scrollableResults != null && scrollableResults.next();
 		}
 
 		/*
@@ -469,7 +413,7 @@ public enum PersistenceProvider implements QueryExtractor,ProxyIdAccessor {
 
 	/**
 	 * {@link CloseableIterator} for EclipseLink.
-	 * 
+	 *
 	 * @author Thomas Darimont
 	 * @author Oliver Gierke
 	 * @param <T>
@@ -478,14 +422,14 @@ public enum PersistenceProvider implements QueryExtractor,ProxyIdAccessor {
 	@SuppressWarnings("unchecked")
 	private static class EclipseLinkScrollableResultsIterator<T> implements CloseableIterator<T> {
 
-		private final ScrollableCursor scrollableCursor;
+		private final @Nullable ScrollableCursor scrollableCursor;
 
 		/**
 		 * Creates a new {@link EclipseLinkScrollableResultsIterator} for the given JPA {@link Query}.
-		 * 
+		 *
 		 * @param jpaQuery must not be {@literal null}.
 		 */
-		public EclipseLinkScrollableResultsIterator(Query jpaQuery) {
+		EclipseLinkScrollableResultsIterator(Query jpaQuery) {
 
 			jpaQuery.setHint("eclipselink.cursor.scrollable", true);
 
@@ -498,7 +442,7 @@ public enum PersistenceProvider implements QueryExtractor,ProxyIdAccessor {
 		 */
 		@Override
 		public boolean hasNext() {
-			return scrollableCursor == null ? false : scrollableCursor.hasNext();
+			return scrollableCursor != null && scrollableCursor.hasNext();
 		}
 
 		/*
@@ -507,6 +451,11 @@ public enum PersistenceProvider implements QueryExtractor,ProxyIdAccessor {
 		 */
 		@Override
 		public T next() {
+
+			if (scrollableCursor == null) {
+				throw new NoSuchElementException("No ScrollableCursor");
+			}
+
 			return (T) scrollableCursor.next();
 		}
 
@@ -519,69 +468,6 @@ public enum PersistenceProvider implements QueryExtractor,ProxyIdAccessor {
 
 			if (scrollableCursor != null) {
 				scrollableCursor.close();
-			}
-		}
-	}
-
-	/**
-	 * {@link CloseableIterator} for OpenJpa.
-	 * 
-	 * @author Thomas Darimont
-	 * @author Oliver Gierke
-	 * @param <T> the domain type to return
-	 * @since 1.8
-	 */
-	private static class OpenJpaResultStreamingIterator<T> implements CloseableIterator<T> {
-
-		private final Iterator<T> iterator;
-
-		/**
-		 * Createsa new {@link OpenJpaResultStreamingIterator} for the given JPA {@link Query}.
-		 * 
-		 * @param jpaQuery must not be {@literal null}.
-		 */
-		@SuppressWarnings({ "rawtypes", "unchecked" })
-		public OpenJpaResultStreamingIterator(Query jpaQuery) {
-
-			OpenJPAQuery kq = OpenJPAPersistence.cast(jpaQuery);
-
-			JDBCFetchPlan fetch = (JDBCFetchPlan) kq.getFetchPlan();
-			fetch.setFetchBatchSize(20);
-			fetch.setResultSetType(ResultSetType.SCROLL_SENSITIVE);
-			fetch.setFetchDirection(FetchDirection.FORWARD);
-			fetch.setLRSSizeAlgorithm(LRSSizeAlgorithm.LAST);
-
-			List<T> resultList = kq.getResultList();
-			iterator = resultList.iterator();
-		}
-
-		/*
-		 * (non-Javadoc)
-		 * @see java.util.Iterator#hasNext()
-		 */
-		@Override
-		public boolean hasNext() {
-			return iterator == null ? false : iterator.hasNext();
-		}
-
-		/*
-		 * (non-Javadoc)
-		 * @see java.util.Iterator#next()
-		 */
-		@Override
-		public T next() {
-			return iterator.next();
-		}
-
-		/*
-		 * (non-Javadoc)
-		 * @see org.springframework.data.util.CloseableIterator#close()
-		 */
-		@Override
-		public void close() {
-
-			if (iterator != null) {
-				OpenJPAPersistence.close(iterator);
 			}
 		}
 	}

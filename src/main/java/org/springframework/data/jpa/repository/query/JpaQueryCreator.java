@@ -1,11 +1,11 @@
 /*
- * Copyright 2008-2015 the original author or authors.
+ * Copyright 2008-2019 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
  *
- *      http://www.apache.org/licenses/LICENSE-2.0
+ *      https://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -18,60 +18,96 @@ package org.springframework.data.jpa.repository.query;
 import static org.springframework.data.jpa.repository.query.QueryUtils.*;
 import static org.springframework.data.repository.query.parser.Part.Type.*;
 
+import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Iterator;
 import java.util.List;
+import java.util.stream.Collectors;
 
 import javax.persistence.criteria.CriteriaBuilder;
 import javax.persistence.criteria.CriteriaQuery;
 import javax.persistence.criteria.Expression;
+import javax.persistence.criteria.ParameterExpression;
 import javax.persistence.criteria.Path;
 import javax.persistence.criteria.Predicate;
 import javax.persistence.criteria.Root;
+import javax.persistence.criteria.Selection;
+import javax.persistence.metamodel.SingularAttribute;
 
 import org.springframework.data.domain.Sort;
 import org.springframework.data.jpa.repository.query.ParameterMetadataProvider.ParameterMetadata;
 import org.springframework.data.mapping.PropertyPath;
+import org.springframework.data.repository.query.ReturnedType;
 import org.springframework.data.repository.query.parser.AbstractQueryCreator;
 import org.springframework.data.repository.query.parser.Part;
 import org.springframework.data.repository.query.parser.Part.Type;
 import org.springframework.data.repository.query.parser.PartTree;
+import org.springframework.lang.Nullable;
 import org.springframework.util.Assert;
 
 /**
  * Query creator to create a {@link CriteriaQuery} from a {@link PartTree}.
- * 
+ *
  * @author Oliver Gierke
+ * @author Mark Paluch
+ * @author Michael Cramer
+ * @author Mark Paluch
+ * @author Reda.Housni-Alaoui
+ * @author Moritz Becker
+ * @author Andrey Kovalev
  */
-public class JpaQueryCreator extends AbstractQueryCreator<CriteriaQuery<Object>, Predicate> {
+public class JpaQueryCreator extends AbstractQueryCreator<CriteriaQuery<? extends Object>, Predicate> {
 
 	private final CriteriaBuilder builder;
 	private final Root<?> root;
-	private final CriteriaQuery<Object> query;
+	private final CriteriaQuery<? extends Object> query;
 	private final ParameterMetadataProvider provider;
+	private final ReturnedType returnedType;
+	private final PartTree tree;
+	private final EscapeCharacter escape;
 
 	/**
 	 * Create a new {@link JpaQueryCreator}.
-	 * 
-	 * @param tree
-	 * @param domainClass
-	 * @param accessor
-	 * @param em
+	 *
+	 * @param tree must not be {@literal null}.
+	 * @param type must not be {@literal null}.
+	 * @param builder must not be {@literal null}.
+	 * @param provider must not be {@literal null}.
 	 */
-	public JpaQueryCreator(PartTree tree, Class<?> domainClass, CriteriaBuilder builder,
+	public JpaQueryCreator(PartTree tree, ReturnedType type, CriteriaBuilder builder,
 			ParameterMetadataProvider provider) {
 
 		super(tree);
+		this.tree = tree;
+
+		CriteriaQuery<?> criteriaQuery = createCriteriaQuery(builder, type);
 
 		this.builder = builder;
-		this.query = builder.createQuery().distinct(tree.isDistinct());
-		this.root = query.from(domainClass);
+		this.query = criteriaQuery.distinct(tree.isDistinct());
+		this.root = query.from(type.getDomainType());
 		this.provider = provider;
+		this.returnedType = type;
+		this.escape = provider.getEscape();
+	}
+
+	/**
+	 * Creates the {@link CriteriaQuery} to apply predicates on.
+	 *
+	 * @param builder will never be {@literal null}.
+	 * @param type will never be {@literal null}.
+	 * @return must not be {@literal null}.
+	 */
+	protected CriteriaQuery<? extends Object> createCriteriaQuery(CriteriaBuilder builder, ReturnedType type) {
+
+		Class<?> typeToRead = type.getTypeToRead();
+
+		return typeToRead == null || tree.isExistsProjection() ? builder.createTupleQuery()
+				: builder.createQuery(typeToRead);
 	}
 
 	/**
 	 * Returns all {@link javax.persistence.criteria.ParameterExpression} created when creating the query.
-	 * 
+	 *
 	 * @return the parameterExpressions
 	 */
 	public List<ParameterMetadata<?>> getParameterExpressions() {
@@ -94,7 +130,6 @@ public class JpaQueryCreator extends AbstractQueryCreator<CriteriaQuery<Object>,
 	 */
 	@Override
 	protected Predicate and(Part part, Predicate base, Iterator<Object> iterator) {
-
 		return builder.and(base, toPredicate(part, root));
 	}
 
@@ -104,44 +139,72 @@ public class JpaQueryCreator extends AbstractQueryCreator<CriteriaQuery<Object>,
 	 */
 	@Override
 	protected Predicate or(Predicate base, Predicate predicate) {
-
 		return builder.or(base, predicate);
 	}
 
 	/**
 	 * Finalizes the given {@link Predicate} and applies the given sort. Delegates to
-	 * {@link #complete(Predicate, Sort, CriteriaQuery, CriteriaBuilder)} and hands it the current {@link CriteriaQuery}
+	 * {@link #complete(Predicate, Sort, CriteriaQuery, CriteriaBuilder, Root)} and hands it the current {@link CriteriaQuery}
 	 * and {@link CriteriaBuilder}.
 	 */
 	@Override
-	protected final CriteriaQuery<Object> complete(Predicate predicate, Sort sort) {
-
+	protected final CriteriaQuery<? extends Object> complete(Predicate predicate, Sort sort) {
 		return complete(predicate, sort, query, builder, root);
 	}
 
 	/**
 	 * Template method to finalize the given {@link Predicate} using the given {@link CriteriaQuery} and
 	 * {@link CriteriaBuilder}.
-	 * 
+	 *
 	 * @param predicate
 	 * @param sort
 	 * @param query
 	 * @param builder
 	 * @return
 	 */
-	protected CriteriaQuery<Object> complete(Predicate predicate, Sort sort, CriteriaQuery<Object> query,
-			CriteriaBuilder builder, Root<?> root) {
+	@SuppressWarnings({ "unchecked", "rawtypes" })
+	protected CriteriaQuery<? extends Object> complete(@Nullable Predicate predicate, Sort sort,
+			CriteriaQuery<? extends Object> query, CriteriaBuilder builder, Root<?> root) {
 
-		CriteriaQuery<Object> select = this.query.select(root).orderBy(QueryUtils.toOrders(sort, root, builder));
+		if (returnedType.needsCustomConstruction()) {
+
+			List<Selection<?>> selections = new ArrayList<>();
+
+			for (String property : returnedType.getInputProperties()) {
+
+				PropertyPath path = PropertyPath.from(property, returnedType.getDomainType());
+				selections.add(toExpressionRecursively(root, path, true).alias(property));
+			}
+
+			query = query.multiselect(selections);
+
+		} else if (tree.isExistsProjection()) {
+
+			if (root.getModel().hasSingleIdAttribute()) {
+
+				SingularAttribute<?, ?> id = root.getModel().getId(root.getModel().getIdType().getJavaType());
+				query = query.multiselect(root.get((SingularAttribute) id).alias(id.getName()));
+
+			} else {
+
+				query = query.multiselect(root.getModel().getIdClassAttributes().stream()//
+						.map(it -> (Selection<?>) root.get((SingularAttribute) it).alias(it.getName()))
+						.collect(Collectors.toList()));
+			}
+
+		} else {
+			query = query.select((Root) root);
+		}
+
+		CriteriaQuery<? extends Object> select = query.orderBy(QueryUtils.toOrders(sort, root, builder));
 		return predicate == null ? select : select.where(predicate);
 	}
 
 	/**
 	 * Creates a {@link Predicate} from the given {@link Part}.
-	 * 
+	 *
 	 * @param part
 	 * @param root
-	 * @param iterator
 	 * @return
 	 */
 	private Predicate toPredicate(Part part, Root<?> root) {
@@ -150,7 +213,7 @@ public class JpaQueryCreator extends AbstractQueryCreator<CriteriaQuery<Object>,
 
 	/**
 	 * Simple builder to contain logic to create JPA {@link Predicate}s from {@link Part}s.
-	 * 
+	 *
 	 * @author Phil Webb
 	 * @author Oliver Gierke
 	 */
@@ -162,21 +225,21 @@ public class JpaQueryCreator extends AbstractQueryCreator<CriteriaQuery<Object>,
 
 		/**
 		 * Creates a new {@link PredicateBuilder} for the given {@link Part} and {@link Root}.
-		 * 
+		 *
 		 * @param part must not be {@literal null}.
 		 * @param root must not be {@literal null}.
 		 */
 		public PredicateBuilder(Part part, Root<?> root) {
 
-			Assert.notNull(part);
-			Assert.notNull(root);
+			Assert.notNull(part, "Part must not be null!");
+			Assert.notNull(root, "Root must not be null!");
 			this.part = part;
 			this.root = root;
 		}
 
 		/**
 		 * Builds a JPA {@link Predicate} from the underlying {@link Part}.
-		 * 
+		 *
 		 * @return
 		 */
 		public Predicate build() {
@@ -207,9 +270,11 @@ public class JpaQueryCreator extends AbstractQueryCreator<CriteriaQuery<Object>,
 				case IS_NOT_NULL:
 					return getTypedPath(root, part).isNotNull();
 				case NOT_IN:
-					return getTypedPath(root, part).in(provider.next(part, Collection.class).getExpression()).not();
+					// cast required for eclipselink workaround, see DATAJPA-433
+					return upperIfIgnoreCase(getTypedPath(root, part)).in((Expression<Collection<?>>) provider.next(part, Collection.class).getExpression()).not();
 				case IN:
-					return getTypedPath(root, part).in(provider.next(part, Collection.class).getExpression());
+					// cast required for eclipselink workaround, see DATAJPA-433
+					return upperIfIgnoreCase(getTypedPath(root, part)).in((Expression<Collection<?>>) provider.next(part, Collection.class).getExpression());
 				case STARTING_WITH:
 				case ENDING_WITH:
 				case CONTAINING:
@@ -218,11 +283,11 @@ public class JpaQueryCreator extends AbstractQueryCreator<CriteriaQuery<Object>,
 					if (property.getLeafProperty().isCollection()) {
 
 						Expression<Collection<Object>> propertyExpression = traversePath(root, property);
-						Expression<Object> parameterExpression = provider.next(part).getExpression();
+						ParameterExpression<Object> parameterExpression = provider.next(part).getExpression();
 
 						// Can't just call .not() in case of negation as EclipseLink chokes on that.
-						return type.equals(NOT_CONTAINING) ? builder.isNotMember(parameterExpression, propertyExpression)
-								: builder.isMember(parameterExpression, propertyExpression);
+						return type.equals(NOT_CONTAINING) ? isNotMember(builder, parameterExpression, propertyExpression)
+								: isMember(builder, parameterExpression, propertyExpression);
 					}
 
 				case LIKE:
@@ -230,7 +295,7 @@ public class JpaQueryCreator extends AbstractQueryCreator<CriteriaQuery<Object>,
 					Expression<String> stringPath = getTypedPath(root, part);
 					Expression<String> propertyExpression = upperIfIgnoreCase(stringPath);
 					Expression<String> parameterExpression = upperIfIgnoreCase(provider.next(part, String.class).getExpression());
-					Predicate like = builder.like(propertyExpression, parameterExpression);
+					Predicate like = builder.like(propertyExpression, parameterExpression, escape.getEscapeCharacter());
 					return type.equals(NOT_LIKE) || type.equals(NOT_CONTAINING) ? like.not() : like;
 				case TRUE:
 					Expression<Boolean> truePath = getTypedPath(root, part);
@@ -246,15 +311,35 @@ public class JpaQueryCreator extends AbstractQueryCreator<CriteriaQuery<Object>,
 				case NEGATING_SIMPLE_PROPERTY:
 					return builder.notEqual(upperIfIgnoreCase(getTypedPath(root, part)),
 							upperIfIgnoreCase(provider.next(part).getExpression()));
+				case IS_EMPTY:
+				case IS_NOT_EMPTY:
+
+					if (!property.getLeafProperty().isCollection()) {
+						throw new IllegalArgumentException("IsEmpty / IsNotEmpty can only be used on collection properties!");
+					}
+
+					Expression<Collection<Object>> collectionPath = traversePath(root, property);
+					return type.equals(IS_NOT_EMPTY) ? builder.isNotEmpty(collectionPath) : builder.isEmpty(collectionPath);
+
 				default:
 					throw new IllegalArgumentException("Unsupported keyword " + type);
 			}
 		}
 
+		private <T> Predicate isMember(CriteriaBuilder builder, Expression<T> parameter,
+				Expression<Collection<T>> property) {
+			return builder.isMember(parameter, property);
+		}
+
+		private <T> Predicate isNotMember(CriteriaBuilder builder, Expression<T> parameter,
+				Expression<Collection<T>> property) {
+			return builder.isNotMember(parameter, property);
+		}
+
 		/**
 		 * Applies an {@code UPPERCASE} conversion to the given {@link Expression} in case the underlying {@link Part}
 		 * requires ignoring case.
-		 * 
+		 *
 		 * @param expression must not be {@literal null}.
 		 * @return
 		 */
@@ -287,7 +372,7 @@ public class JpaQueryCreator extends AbstractQueryCreator<CriteriaQuery<Object>,
 
 		/**
 		 * Returns a path to a {@link Comparable}.
-		 * 
+		 *
 		 * @param root
 		 * @param part
 		 * @return

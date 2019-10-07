@@ -1,11 +1,11 @@
 /*
- * Copyright 2011-2015 the original author or authors.
+ * Copyright 2011-2019 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
  *
- *      http://www.apache.org/licenses/LICENSE-2.0
+ *      https://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -15,12 +15,11 @@
  */
 package org.springframework.data.jpa.repository.support;
 
-import static java.util.Collections.singletonMap;
-import static org.mockito.Mockito.times;
-import static org.mockito.Mockito.verify;
-import static org.mockito.Mockito.when;
+import static java.util.Collections.*;
+import static org.mockito.Mockito.*;
 
-import java.io.Serializable;
+import java.util.Arrays;
+import java.util.Optional;
 
 import javax.persistence.EntityGraph;
 import javax.persistence.EntityManager;
@@ -32,7 +31,7 @@ import org.junit.Before;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.mockito.Mock;
-import org.mockito.runners.MockitoJUnitRunner;
+import org.mockito.junit.MockitoJUnitRunner;
 import org.springframework.dao.EmptyResultDataAccessException;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.jpa.domain.sample.User;
@@ -41,11 +40,13 @@ import org.springframework.data.repository.CrudRepository;
 
 /**
  * Unit tests for {@link SimpleJpaRepository}.
- * 
+ *
  * @author Oliver Gierke
  * @author Thomas Darimont
+ * @author Mark Paluch
+ * @author Jens Schauder
  */
-@RunWith(MockitoJUnitRunner.class)
+@RunWith(MockitoJUnitRunner.Silent.class)
 public class SimpleJpaRepositoryUnitTests {
 
 	SimpleJpaRepository<User, Integer> repo;
@@ -79,46 +80,109 @@ public class SimpleJpaRepositoryUnitTests {
 		repo.setRepositoryMethodMetadata(metadata);
 	}
 
-	/**
-	 * @see DATAJPA-124
-	 */
-	@Test
-	public void doesNotActuallyRetrieveObjectsForPageableOutOfRange() {
+	@Test // DATAJPA-124, DATAJPA-912
+	public void retrieveObjectsForPageableOutOfRange() {
 
 		when(countQuery.getSingleResult()).thenReturn(20L);
-		repo.findAll(new PageRequest(2, 10));
+		repo.findAll(PageRequest.of(2, 10));
 
-		verify(query, times(0)).getResultList();
+		verify(query).getResultList();
 	}
 
-	/**
-	 * @see DATAJPA-177
-	 */
-	@Test(expected = EmptyResultDataAccessException.class)
+	@Test // DATAJPA-912
+	public void doesNotRetrieveCountWithoutOffsetAndResultsWithinPageSize() {
+
+		when(query.getResultList()).thenReturn(Arrays.asList(new User(), new User()));
+
+		repo.findAll(PageRequest.of(0, 10));
+
+		verify(countQuery, never()).getSingleResult();
+	}
+
+	@Test // DATAJPA-912
+	public void doesNotRetrieveCountWithOffsetAndResultsWithinPageSize() {
+
+		when(query.getResultList()).thenReturn(Arrays.asList(new User(), new User()));
+
+		repo.findAll(PageRequest.of(2, 10));
+
+		verify(countQuery, never()).getSingleResult();
+	}
+
+	@Test(expected = EmptyResultDataAccessException.class) // DATAJPA-177
 	public void throwsExceptionIfEntityToDeleteDoesNotExist() {
 
-		repo.delete(4711);
+		repo.deleteById(4711);
 	}
 
-	/**
-	 * @see DATAJPA-689
-	 * @see DATAJPA-696
-	 */
-	@Test
+	@Test // DATAJPA-689, DATAJPA-696
 	@SuppressWarnings({ "rawtypes", "unchecked" })
-	public void shouldPropagateConfiguredEntityGraphToFindOne() throws Exception{
+	public void shouldPropagateConfiguredEntityGraphToFindOne() throws Exception {
 
 		String entityGraphName = "User.detail";
 		when(entityGraphAnnotation.value()).thenReturn(entityGraphName);
 		when(entityGraphAnnotation.type()).thenReturn(EntityGraphType.LOAD);
-		when(metadata.getEntityGraph()).thenReturn(entityGraphAnnotation);
+		when(metadata.getEntityGraph()).thenReturn(Optional.of(entityGraphAnnotation));
 		when(em.getEntityGraph(entityGraphName)).thenReturn((EntityGraph) entityGraph);
 		when(information.getEntityName()).thenReturn("User");
-		when(metadata.getMethod()).thenReturn(CrudRepository.class.getMethod("findOne", Serializable.class));
-		
+		when(metadata.getMethod()).thenReturn(CrudRepository.class.getMethod("findById", Object.class));
+
 		Integer id = 0;
-		repo.findOne(id);
+		repo.findById(id);
 
 		verify(em).find(User.class, id, singletonMap(EntityGraphType.LOAD.getKey(), (Object) entityGraph));
 	}
+
+	@Test // DATAJPA-931
+	public void mergeGetsCalledWhenDetached() {
+
+		User detachedUser = new User();
+
+		when(em.contains(detachedUser)).thenReturn(false);
+
+		repo.save(detachedUser);
+
+		verify(em).merge(detachedUser);
+	}
+
+	@Test // DATAJPA-931, DATAJPA-1261
+	public void mergeGetsCalledWhenAttached() {
+
+		User attachedUser = new User();
+
+		when(em.contains(attachedUser)).thenReturn(true);
+
+		repo.save(attachedUser);
+
+		verify(em).merge(attachedUser);
+	}
+
+	@Test // DATAJPA-1535
+	public void doNothingWhenNewInstanceGetsDeleted() {
+
+		User newUser = new User();
+		newUser.setId(null);
+
+		repo.delete(newUser);
+
+		verify(em, never()).find(any(Class.class), any(Object.class));
+		verify(em, never()).remove(newUser);
+		verify(em, never()).merge(newUser);
+	}
+
+	@Test // DATAJPA-1535
+	public void doNothingWhenNonExistentInstanceGetsDeleted() {
+
+		User newUser = new User();
+		newUser.setId(23);
+
+		when(information.isNew(newUser)).thenReturn(false);
+		when(em.find(User.class,23)).thenReturn(null);
+
+		repo.delete(newUser);
+
+		verify(em, never()).remove(newUser);
+		verify(em, never()).merge(newUser);
+	}
+
 }

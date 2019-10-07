@@ -1,11 +1,11 @@
 /*
- * Copyright 2008-2014 the original author or authors.
+ * Copyright 2008-2019 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
  *
- *      http://www.apache.org/licenses/LICENSE-2.0
+ *      https://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -25,12 +25,15 @@ import org.springframework.data.annotation.QueryAnnotation;
 
 /**
  * Annotation to declare finder queries directly on repository methods.
- * 
+ *
  * @author Oliver Gierke
  * @author Thomas Darimont
+ * @author Christoph Strobl
+ *
+ * @see Modifying
  */
 @Retention(RetentionPolicy.RUNTIME)
-@Target(ElementType.METHOD)
+@Target({ ElementType.METHOD, ElementType.ANNOTATION_TYPE })
 @QueryAnnotation
 @Documented
 public @interface Query {
@@ -49,7 +52,7 @@ public @interface Query {
 	/**
 	 * Defines the projection part of the count query that is generated for pagination. If neither {@link #countQuery()}
 	 * not {@link #countProjection()} is configured we will derive the count query from the method name.
-	 * 
+	 *
 	 * @return
 	 * @since 1.6
 	 */
@@ -69,7 +72,7 @@ public @interface Query {
 	/**
 	 * Returns the name of the {@link javax.persistence.NamedQuery} to be used to execute count queries when pagination is
 	 * used. Will default to the named query name configured suffixed by {@code .count}.
-	 * 
+	 *
 	 * @see #name()
 	 * @return
 	 */

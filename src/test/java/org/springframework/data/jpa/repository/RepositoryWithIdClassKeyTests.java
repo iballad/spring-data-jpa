@@ -1,11 +1,11 @@
 /*
- * Copyright 2016 the original author or authors.
+ * Copyright 2016-2019 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
  *
- *      http://www.apache.org/licenses/LICENSE-2.0
+ *      https://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -15,8 +15,9 @@
  */
 package org.springframework.data.jpa.repository;
 
-import static org.hamcrest.Matchers.*;
-import static org.junit.Assert.*;
+import static org.assertj.core.api.Assertions.*;
+
+import java.util.Optional;
 
 import org.junit.Rule;
 import org.junit.Test;
@@ -43,6 +44,7 @@ import org.springframework.transaction.annotation.Transactional;
  * Integration tests for Repositories using {@link javax.persistence.IdClass} identifiers.
  *
  * @author Mark Paluch
+ * @author Jens Schauder
  */
 @RunWith(SpringJUnit4ClassRunner.class)
 @ContextConfiguration(classes = RepositoryWithIdClassKeyTests.TestConfig.class)
@@ -57,22 +59,11 @@ public class RepositoryWithIdClassKeyTests {
 
 	@Autowired private ItemSiteRepository itemSiteRepository;
 
-	@Configuration
-	@EnableJpaRepositories(basePackageClasses = SampleConfig.class)
-	static abstract class Config {
-
-	}
-
-	@ImportResource("classpath:infrastructure.xml")
-	static class TestConfig extends Config {
-
-	}
-
 	/**
-	 * @see DATAJPA-413
-	 * @see Final JPA 2.1 Specification 2.4.1.3 Derived Identities Example 2
+	 * @see <a href="download.oracle.com/otn-pub/jcp/persistence-2_1-fr-eval-spec/JavaPersistence.pdf">Final JPA 2.1
+	 *      Specification 2.4.1.3 Derived Identities Example 2</a>
 	 */
-	@Test
+	@Test // DATAJPA-413
 	public void shouldSaveAndLoadEntitiesWithDerivedIdentities() throws Exception {
 
 		Site site = siteRepository.save(new Site());
@@ -80,9 +71,19 @@ public class RepositoryWithIdClassKeyTests {
 
 		itemSiteRepository.save(new ItemSite(item, site));
 
-		ItemSite loaded = itemSiteRepository
-				.findOne(new ItemSiteId(new ItemId(item.getId(), item.getManufacturerId()), site.getId()));
+		Optional<ItemSite> loaded = itemSiteRepository
+				.findById(new ItemSiteId(new ItemId(item.getId(), item.getManufacturerId()), site.getId()));
 
-		assertThat(loaded, is(notNullValue()));
+		assertThat(loaded).isNotNull();
+		assertThat(loaded.isPresent()).isTrue();
 	}
+
+	@Configuration
+	@EnableJpaRepositories(basePackageClasses = SampleConfig.class)
+	static abstract class Config {
+
+	}
+
+	@ImportResource("classpath:infrastructure.xml")
+	static class TestConfig extends Config {}
 }

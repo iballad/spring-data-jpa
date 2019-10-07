@@ -1,11 +1,11 @@
 /*
- * Copyright 2008-2015 the original author or authors.
+ * Copyright 2008-2019 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
  *
- *      http://www.apache.org/licenses/LICENSE-2.0
+ *      https://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -20,52 +20,74 @@ import java.util.Date;
 import java.util.HashSet;
 import java.util.Set;
 
-import javax.persistence.CascadeType;
-import javax.persistence.Column;
-import javax.persistence.ElementCollection;
-import javax.persistence.Embedded;
-import javax.persistence.Entity;
-import javax.persistence.GeneratedValue;
-import javax.persistence.GenerationType;
-import javax.persistence.Id;
-import javax.persistence.Lob;
-import javax.persistence.ManyToMany;
-import javax.persistence.ManyToOne;
-import javax.persistence.NamedAttributeNode;
-import javax.persistence.NamedEntityGraph;
-import javax.persistence.NamedEntityGraphs;
-import javax.persistence.NamedQuery;
-import javax.persistence.NamedStoredProcedureQueries;
-import javax.persistence.NamedStoredProcedureQuery;
-import javax.persistence.ParameterMode;
-import javax.persistence.StoredProcedureParameter;
-import javax.persistence.Table;
-import javax.persistence.Temporal;
-import javax.persistence.TemporalType;
+import javax.persistence.*;
 
 /**
  * Domain class representing a person emphasizing the use of {@code AbstractEntity}. No declaration of an id is
  * required. The id is typed by the parameterizable superclass.
- * 
+ *
  * @author Oliver Gierke
  * @author Thomas Darimont
+ * @author Christoph Strobl
+ * @author Jens Schauder
+ * @author Jeff Sheets
+ * @author JyotirmoyVS
  */
 @Entity
-@NamedEntityGraphs({
-		@NamedEntityGraph(name = "User.overview", attributeNodes = { @NamedAttributeNode("roles") }),
-		@NamedEntityGraph(name = "User.detail", attributeNodes = { @NamedAttributeNode("roles"),
-				@NamedAttributeNode("manager"), @NamedAttributeNode("colleagues") }),
-		@NamedEntityGraph(name = "User.getOneWithDefinedEntityGraphById", attributeNodes = { @NamedAttributeNode("roles"),
-				@NamedAttributeNode("manager"), @NamedAttributeNode("colleagues") }) })
-@NamedQuery(name = "User.findByEmailAddress", query = "SELECT u FROM User u WHERE u.emailAddress = ?1")
+@NamedEntityGraphs({ @NamedEntityGraph(name = "User.overview", attributeNodes = { @NamedAttributeNode("roles") }),
+		@NamedEntityGraph(name = "User.detail",
+				attributeNodes = { @NamedAttributeNode("roles"), @NamedAttributeNode("manager"),
+						@NamedAttributeNode("colleagues") }),
+		@NamedEntityGraph(name = "User.getOneWithDefinedEntityGraphById",
+				attributeNodes = { @NamedAttributeNode("roles"), @NamedAttributeNode("manager"),
+						@NamedAttributeNode("colleagues") }),
+		@NamedEntityGraph(name = "User.withSubGraph",
+				attributeNodes = { @NamedAttributeNode("roles"), @NamedAttributeNode(value = "colleagues",
+						subgraph = "User.colleagues") },
+				subgraphs = { @NamedSubgraph(name = "User.colleagues",
+						attributeNodes = { @NamedAttributeNode("colleagues"), @NamedAttributeNode("roles") }) }),
+		@NamedEntityGraph(name = "User.deepGraph",
+				attributeNodes = { @NamedAttributeNode("roles"),
+						@NamedAttributeNode(value = "colleagues", subgraph = "User.colleagues") },
+				subgraphs = {
+						@NamedSubgraph(name = "User.colleagues",
+								attributeNodes = { @NamedAttributeNode("roles"),
+										@NamedAttributeNode(value = "colleagues", subgraph = "User.colleaguesOfColleagues") }),
+						@NamedSubgraph(name = "User.colleaguesOfColleagues",
+								attributeNodes = { @NamedAttributeNode("roles"), }) }) })
+@NamedQueries({ //
+		@NamedQuery(name = "User.findByEmailAddress", //
+				query = "SELECT u FROM User u WHERE u.emailAddress = ?1"), //
+		@NamedQuery(name = "User.findByNamedQueryWithAliasInInvertedOrder", //
+				query = "SELECT u.lastname AS lastname, u.firstname AS firstname FROM User u ORDER BY u.lastname ASC"),
+		@NamedQuery(name = "User.findByNamedQueryWithConstructorExpression",
+				query = "SELECT new org.springframework.data.jpa.repository.sample.NameOnlyDto(u.firstname, u.lastname) from User u") })
+
 @NamedStoredProcedureQueries({ //
-@NamedStoredProcedureQuery(name = "User.plus1", procedureName = "plus1inout", parameters = {
-		@StoredProcedureParameter(mode = ParameterMode.IN, name = "arg", type = Integer.class),
-		@StoredProcedureParameter(mode = ParameterMode.OUT, name = "res", type = Integer.class) }) //
+		@NamedStoredProcedureQuery(name = "User.plus1", procedureName = "plus1inout",
+				parameters = { @StoredProcedureParameter(mode = ParameterMode.IN, name = "arg", type = Integer.class),
+						@StoredProcedureParameter(mode = ParameterMode.OUT, name = "res", type = Integer.class) }), //
+		@NamedStoredProcedureQuery(name = "User.plus1IO2", procedureName = "plus1inout2",
+				parameters = { @StoredProcedureParameter(mode = ParameterMode.IN, name = "arg", type = Integer.class),
+						@StoredProcedureParameter(mode = ParameterMode.OUT, name = "res", type = Integer.class),
+						@StoredProcedureParameter(mode = ParameterMode.OUT, name = "res2", type = Integer.class) }), //
+		@NamedStoredProcedureQuery(name = "User.plus1IOoptional", procedureName = "plus1inoutoptional",
+				parameters = { @StoredProcedureParameter(mode = ParameterMode.IN, name = "arg", type = Integer.class),
+						@StoredProcedureParameter(mode = ParameterMode.OUT, name = "res", type = Integer.class),
+						@StoredProcedureParameter(mode = ParameterMode.OUT, name = "res2", type = Integer.class) }) // DATAJPA-1579
 })
-@NamedStoredProcedureQuery(name = "User.plus1IO", procedureName = "plus1inout", parameters = {
-		@StoredProcedureParameter(mode = ParameterMode.IN, name = "arg", type = Integer.class),
-		@StoredProcedureParameter(mode = ParameterMode.OUT, name = "res", type = Integer.class) })
+@NamedStoredProcedureQuery(name = "User.plus1IO", procedureName = "plus1inout",
+		parameters = { @StoredProcedureParameter(mode = ParameterMode.IN, name = "arg", type = Integer.class),
+				@StoredProcedureParameter(mode = ParameterMode.OUT, name = "res", type = Integer.class) })
+
+// Annotations for native Query with pageable
+@SqlResultSetMappings({
+		@SqlResultSetMapping(name = "SqlResultSetMapping.count", columns = @ColumnResult(name = "cnt")) })
+@NamedNativeQueries({
+		@NamedNativeQuery(name = "User.findByNativeNamedQueryWithPageable", resultClass = User.class,
+				query = "SELECT * FROM SD_USER ORDER BY UCASE(firstname)"),
+		@NamedNativeQuery(name = "User.findByNativeNamedQueryWithPageable.count",
+				resultSetMapping = "SqlResultSetMapping.count", query = "SELECT count(*) AS cnt FROM SD_USER") })
 @Table(name = "SD_User")
 public class User {
 
@@ -101,7 +123,7 @@ public class User {
 
 	/**
 	 * Creates a new instance of {@code User} with preinitialized values for firstname, lastname, email address and roles.
-	 * 
+	 *
 	 * @param firstname
 	 * @param lastname
 	 * @param emailAddress
@@ -137,7 +159,7 @@ public class User {
 
 	/**
 	 * Returns the firstname.
-	 * 
+	 *
 	 * @return the firstname
 	 */
 	public String getFirstname() {
@@ -147,7 +169,7 @@ public class User {
 
 	/**
 	 * Sets the firstname.
-	 * 
+	 *
 	 * @param firstname the firstname to set
 	 */
 	public void setFirstname(final String firstname) {
@@ -157,7 +179,7 @@ public class User {
 
 	/**
 	 * Returns the lastname.
-	 * 
+	 *
 	 * @return the lastname
 	 */
 	public String getLastname() {
@@ -167,7 +189,7 @@ public class User {
 
 	/**
 	 * Sets the lastname.
-	 * 
+	 *
 	 * @param lastname the lastname to set
 	 */
 	public void setLastname(String lastname) {
@@ -191,7 +213,7 @@ public class User {
 
 	/**
 	 * Returns the email address.
-	 * 
+	 *
 	 * @return the emailAddress
 	 */
 	public String getEmailAddress() {
@@ -201,7 +223,7 @@ public class User {
 
 	/**
 	 * Sets the email address.
-	 * 
+	 *
 	 * @param emailAddress the emailAddress to set
 	 */
 	public void setEmailAddress(String emailAddress) {
@@ -225,7 +247,7 @@ public class User {
 
 	/**
 	 * Returns the user's roles.
-	 * 
+	 *
 	 * @return the roles
 	 */
 	public Set<Role> getRoles() {
@@ -243,7 +265,7 @@ public class User {
 
 	/**
 	 * Revokes a role from a user.
-	 * 
+	 *
 	 * @param role
 	 */
 	public void removeRole(Role role) {
@@ -253,7 +275,7 @@ public class User {
 
 	/**
 	 * Returns the colleagues of the user.
-	 * 
+	 *
 	 * @return the colleagues
 	 */
 	public Set<User> getColleagues() {
@@ -263,7 +285,7 @@ public class User {
 
 	/**
 	 * Adds a new colleague to the user. Adding the user himself as colleague is a no-op.
-	 * 
+	 *
 	 * @param collegue
 	 */
 	public void addColleague(User collegue) {
@@ -279,7 +301,7 @@ public class User {
 
 	/**
 	 * Removes a colleague from the list of colleagues.
-	 * 
+	 *
 	 * @param colleague
 	 */
 	public void removeColleague(User colleague) {
@@ -341,7 +363,7 @@ public class User {
 
 	/*
 	 * (non-Javadoc)
-	 * 
+	 *
 	 * @see java.lang.Object#equals(java.lang.Object)
 	 */
 	@Override
@@ -382,9 +404,13 @@ public class User {
 		this.dateOfBirth = dateOfBirth;
 	}
 
+	public void setCreatedAt(Date createdAt) {
+		this.createdAt = createdAt;
+	}
+
 	/*
 	 * (non-Javadoc)
-	 * 
+	 *
 	 * @see java.lang.Object#toString()
 	 */
 	@Override

@@ -1,11 +1,11 @@
 /*
- * Copyright 2014 the original author or authors.
+ * Copyright 2014-2019 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
  *
- *      http://www.apache.org/licenses/LICENSE-2.0
+ *      https://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -15,8 +15,7 @@
  */
 package org.springframework.data.jpa.repository.support;
 
-import static org.hamcrest.CoreMatchers.*;
-import static org.junit.Assert.*;
+import static org.assertj.core.api.Assertions.*;
 
 import javax.persistence.EntityManager;
 import javax.persistence.PersistenceContext;
@@ -30,13 +29,14 @@ import org.springframework.test.context.ContextConfiguration;
 import org.springframework.test.context.junit4.SpringJUnit4ClassRunner;
 import org.springframework.transaction.annotation.Transactional;
 
-import com.mysema.query.jpa.JPQLQuery;
-import com.mysema.query.types.path.PathBuilder;
+import com.querydsl.core.types.dsl.PathBuilder;
+import com.querydsl.jpa.JPQLQuery;
 
 /**
  * Integration tests for {@link Querydsl}.
- * 
+ *
  * @author Thomas Darimont
+ * @author Jens Schauder
  */
 @RunWith(SpringJUnit4ClassRunner.class)
 @ContextConfiguration({ "classpath:infrastructure.xml" })
@@ -47,25 +47,24 @@ public class QuerydslIntegrationTests {
 
 	Querydsl querydsl;
 	PathBuilder<User> userPath;
-	JPQLQuery userQuery;
+	JPQLQuery<User> userQuery;
 
 	@Before
 	public void setup() {
 
 		userPath = new PathBuilder<User>(User.class, "user");
 		querydsl = new Querydsl(em, userPath);
-		userQuery = querydsl.createQuery().from(userPath);
+		userQuery = querydsl.createQuery().select(userPath);
 	}
 
-	/**
-	 * @see DATAJPA-499
-	 */
-	@Test
+	@Test // DATAJPA-499
 	public void defaultOrderingShouldNotGenerateAnNullOrderingHint() {
 
-		JPQLQuery result = querydsl.applySorting(new Sort(new Sort.Order("firstname")), userQuery);
+		JPQLQuery<User> result = querydsl.applySorting(Sort.by("firstname"), userQuery);
 
-		assertThat(result, is(notNullValue()));
-		assertThat(result.toString(), is(not(anyOf(containsString("nulls first"), containsString("nulls last")))));
+		assertThat(result).isNotNull();
+		assertThat(result.toString()) //
+				.doesNotContain("nulls first") //
+				.doesNotContain("nulls last");
 	}
 }

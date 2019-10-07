@@ -1,11 +1,11 @@
 /*
- * Copyright 2013 the original author or authors.
+ * Copyright 2013-2019 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
  *
- *      http://www.apache.org/licenses/LICENSE-2.0
+ *      https://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -15,8 +15,7 @@
  */
 package org.springframework.data.jpa.repository.support;
 
-import static org.hamcrest.Matchers.*;
-import static org.junit.Assert.*;
+import static org.assertj.core.api.Assertions.*;
 import static org.springframework.data.jpa.domain.JpaSort.*;
 
 import java.util.List;
@@ -47,9 +46,10 @@ import org.springframework.transaction.annotation.Transactional;
 
 /**
  * Integration tests for {@link MailMessageRepository}.
- * 
+ *
  * @author Thomas Darimont
  * @author Oliver Gierke
+ * @author Jens Schauder
  */
 @RunWith(SpringJUnit4ClassRunner.class)
 @ContextConfiguration(classes = SampleConfig.class)
@@ -63,10 +63,7 @@ public class MailMessageRepositoryIntegrationTests {
 
 	@Autowired MailMessageRepository mailMessageRepository;
 
-	/**
-	 * @see DATAJPA-12
-	 */
-	@Test
+	@Test // DATAJPA-12
 	public void shouldSortMailWithPageRequestAndJpaSortCriteriaNullsFirst() {
 
 		MailMessage message1 = new MailMessage();
@@ -80,19 +77,16 @@ public class MailMessageRepositoryIntegrationTests {
 		mailMessageRepository.save(message1);
 		mailMessageRepository.save(message2);
 
-		Page<MailMessage> results = mailMessageRepository.findAll(new PageRequest(0, 20, //
+		Page<MailMessage> results = mailMessageRepository.findAll(PageRequest.of(0, 20, //
 				new JpaSort(Direction.ASC, path(MailMessage_.mailSender).dot(MailSender_.name))));
 		List<MailMessage> messages = results.getContent();
 
-		assertThat(messages, hasSize(2));
-		assertThat(messages.get(0).getMailSender(), is(nullValue()));
-		assertThat(messages.get(1).getMailSender(), is(sender1));
+		assertThat(messages).hasSize(2);
+		assertThat(messages.get(0).getMailSender()).isNull();
+		assertThat(messages.get(1).getMailSender()).isEqualTo(sender1);
 	}
 
-	/**
-	 * @see DATAJPA-12
-	 */
-	@Test
+	@Test // DATAJPA-12
 	public void shouldSortMailWithQueryDslRepositoryAndDslSortCriteriaNullsFirst() {
 
 		MailMessage message1 = new MailMessage();
@@ -106,18 +100,15 @@ public class MailMessageRepositoryIntegrationTests {
 		mailMessageRepository.save(message1);
 		mailMessageRepository.save(message2);
 
-		List<MailMessage> messages = mailMessageRepository
-				.findAll(message.content.eq("abc"), message.mailSender.name.asc());
+		List<MailMessage> messages = mailMessageRepository.findAll(message.content.eq("abc"),
+				message.mailSender.name.asc());
 
-		assertThat(messages, hasSize(2));
-		assertThat(messages.get(0).getMailSender(), is(nullValue()));
-		assertThat(messages.get(1).getMailSender(), is(sender1));
+		assertThat(messages).hasSize(2);
+		assertThat(messages.get(0).getMailSender()).isNull();
+		assertThat(messages.get(1).getMailSender()).isEqualTo(sender1);
 	}
 
-	/**
-	 * @see DATAJPA-491
-	 */
-	@Test
+	@Test // DATAJPA-491
 	public void shouldSortMailWithNestedQueryDslSortCriteriaNullsFirst() {
 
 		MailUser fooMailUser = new MailUser("foo");
@@ -138,15 +129,12 @@ public class MailMessageRepositoryIntegrationTests {
 		List<MailMessage> messages = mailMessageRepository.findAll(message.content.eq("abc"),
 				message.mailSender.mailUser.name.asc());
 
-		assertThat(messages, hasSize(2));
-		assertThat(messages.get(0).getMailSender(), is(nullValue()));
-		assertThat(messages.get(1).getMailSender(), is(sender1));
+		assertThat(messages).hasSize(2);
+		assertThat(messages.get(0).getMailSender()).isNull();
+		assertThat(messages.get(1).getMailSender()).isEqualTo(sender1);
 	}
 
-	/**
-	 * @see DATAJPA-491
-	 */
-	@Test
+	@Test // DATAJPA-491
 	public void shouldSortMailWithNestedStringBasedSortCriteriaNullsFirst() {
 
 		MailUser fooMailUser = new MailUser("foo");
@@ -164,13 +152,13 @@ public class MailMessageRepositoryIntegrationTests {
 		mailMessageRepository.save(message1);
 		mailMessageRepository.save(message2);
 
-		Page<MailMessage> page = mailMessageRepository.findAll(new PageRequest(0, 10, new Sort(Sort.Direction.ASC,
-				"mailSender.mailUser.name")));
+		Page<MailMessage> page = mailMessageRepository
+				.findAll(PageRequest.of(0, 10, Sort.by(Sort.Direction.ASC, "mailSender.mailUser.name")));
 
 		List<MailMessage> messages = page.getContent();
 
-		assertThat(messages, hasSize(2));
-		assertThat(messages.get(0).getMailSender(), is(nullValue()));
-		assertThat(messages.get(1).getMailSender(), is(sender1));
+		assertThat(messages).hasSize(2);
+		assertThat(messages.get(0).getMailSender()).isNull();
+		assertThat(messages.get(1).getMailSender()).isEqualTo(sender1);
 	}
 }

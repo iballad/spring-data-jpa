@@ -1,11 +1,11 @@
 /*
- * Copyright 2011-2016 the original author or authors.
+ * Copyright 2011-2019 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
  *
- *      http://www.apache.org/licenses/LICENSE-2.0
+ *      https://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -15,10 +15,9 @@
  */
 package org.springframework.data.jpa.repository;
 
-import static org.mockito.Matchers.*;
+import static org.mockito.ArgumentMatchers.*;
 import static org.mockito.Mockito.*;
 
-import java.io.Serializable;
 import java.util.Collections;
 import java.util.Map;
 
@@ -28,12 +27,13 @@ import javax.persistence.LockModeType;
 import javax.persistence.TypedQuery;
 import javax.persistence.criteria.CriteriaBuilder;
 import javax.persistence.criteria.CriteriaQuery;
+import javax.persistence.metamodel.Metamodel;
 
 import org.junit.Before;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.mockito.Mock;
-import org.mockito.runners.MockitoJUnitRunner;
+import org.mockito.junit.MockitoJUnitRunner;
 import org.springframework.data.jpa.domain.sample.QRole;
 import org.springframework.data.jpa.domain.sample.Role;
 import org.springframework.data.jpa.repository.sample.RoleRepository;
@@ -41,8 +41,8 @@ import org.springframework.data.jpa.repository.support.JpaEntityInformation;
 import org.springframework.data.jpa.repository.support.JpaRepositoryFactory;
 
 /**
- * Integratio test for lock support.
- * 
+ * Integration test for lock support.
+ *
  * @author Oliver Gierke
  * @author Thomas Darimont
  */
@@ -56,6 +56,7 @@ public class CrudMethodMetadataUnitTests {
 	@Mock JpaEntityInformation<Role, Integer> information;
 	@Mock TypedQuery<Role> typedQuery;
 	@Mock javax.persistence.Query query;
+	@Mock Metamodel metamodel;
 
 	RoleRepository repository;
 
@@ -64,6 +65,7 @@ public class CrudMethodMetadataUnitTests {
 
 		when(information.getJavaType()).thenReturn(Role.class);
 
+		when(em.getMetamodel()).thenReturn(metamodel);
 		when(em.getDelegate()).thenReturn(em);
 		when(em.getEntityManagerFactory()).thenReturn(emf);
 		when(emf.createEntityManager()).thenReturn(em);
@@ -71,7 +73,7 @@ public class CrudMethodMetadataUnitTests {
 		JpaRepositoryFactory factory = new JpaRepositoryFactory(em) {
 			@Override
 			@SuppressWarnings("unchecked")
-			public <T, ID extends Serializable> JpaEntityInformation<T, ID> getEntityInformation(Class<T> domainClass) {
+			public <T, ID> JpaEntityInformation<T, ID> getEntityInformation(Class<T> domainClass) {
 				return (JpaEntityInformation<T, ID>) information;
 			}
 		};
@@ -79,10 +81,7 @@ public class CrudMethodMetadataUnitTests {
 		repository = factory.getRepository(RoleRepository.class);
 	}
 
-	/**
-	 * @see DATAJPA-73, DATAJPA-173
-	 */
-	@Test
+	@Test // DATAJPA-73, DATAJPA-173
 	public void usesLockInformationAnnotatedAtRedeclaredMethod() {
 
 		when(em.getCriteriaBuilder()).thenReturn(builder);
@@ -96,13 +95,10 @@ public class CrudMethodMetadataUnitTests {
 		verify(typedQuery).setHint("foo", "bar");
 	}
 
-	/**
-	 * @see DATAJPA-359, DATAJPA-173
-	 */
-	@Test
+	@Test // DATAJPA-359, DATAJPA-173
 	public void usesMetadataAnnotatedAtRedeclaredFindOne() {
 
-		repository.findOne(1);
+		repository.findById(1);
 
 		Map<String, Object> expectedLinks = Collections.singletonMap("foo", (Object) "bar");
 		LockModeType expectedLockModeType = LockModeType.READ;
@@ -110,10 +106,7 @@ public class CrudMethodMetadataUnitTests {
 		verify(em).find(Role.class, 1, expectedLockModeType, expectedLinks);
 	}
 
-	/**
-	 * @see DATAJPA-574
-	 */
-	@Test
+	@Test // DATAJPA-574
 	public void appliesLockModeAndQueryHintsToQuerydslQuery() {
 
 		when(em.getDelegate()).thenReturn(mock(EntityManager.class));

@@ -1,11 +1,11 @@
 /*
- * Copyright 2011 the original author or authors.
+ * Copyright 2011-2019 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
  *
- *      http://www.apache.org/licenses/LICENSE-2.0
+ *      https://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -16,6 +16,7 @@
 package org.springframework.data.jpa.repository.cdi;
 
 import java.lang.annotation.Annotation;
+import java.util.Optional;
 import java.util.Set;
 
 import javax.enterprise.context.spi.CreationalContext;
@@ -30,10 +31,11 @@ import org.springframework.util.Assert;
 
 /**
  * A bean which represents a JPA repository.
- * 
+ *
  * @author Dirk Mahler
  * @author Oliver Gierke
  * @author Mark Paluch
+ * @author Christoph Strobl
  * @param <T> The type of the repository.
  */
 class JpaRepositoryBean<T> extends CdiRepositoryBean<T> {
@@ -42,34 +44,31 @@ class JpaRepositoryBean<T> extends CdiRepositoryBean<T> {
 
 	/**
 	 * Constructs a {@link JpaRepositoryBean}.
-	 * 
+	 *
 	 * @param beanManager must not be {@literal null}.
 	 * @param entityManagerBean must not be {@literal null}.
 	 * @param qualifiers must not be {@literal null}.
 	 * @param repositoryType must not be {@literal null}.
-	 * @param detector can be {@literal null}.
+	 * @param detector can be {@link Optional#empty()}.
 	 */
 	JpaRepositoryBean(BeanManager beanManager, Bean<EntityManager> entityManagerBean, Set<Annotation> qualifiers,
-			Class<T> repositoryType, CustomRepositoryImplementationDetector detector) {
+			Class<T> repositoryType, Optional<CustomRepositoryImplementationDetector> detector) {
 
 		super(qualifiers, repositoryType, beanManager, detector);
 
-		Assert.notNull(entityManagerBean);
+		Assert.notNull(entityManagerBean, "EntityManager bean must not be null!");
 		this.entityManagerBean = entityManagerBean;
 	}
 
-	/* 
+	/*
 	 * (non-Javadoc)
-	 * @see org.springframework.data.repository.cdi.CdiRepositoryBean#create(javax.enterprise.context.spi.CreationalContext, java.lang.Class, java.lang.Object)
+	 * @see org.springframework.data.repository.cdi.CdiRepositoryBean#create(javax.enterprise.context.spi.CreationalContext, java.lang.Class)
 	 */
 	@Override
-	public T create(CreationalContext<T> creationalContext, Class<T> repositoryType, Object customImplementation) {
+	protected T create(CreationalContext<T> creationalContext, Class<T> repositoryType) {
 
-		// Get an instance from the associated entity manager bean.
 		EntityManager entityManager = getDependencyInstance(entityManagerBean, EntityManager.class);
 
-		// Create the JPA repository instance and return it.
-		JpaRepositoryFactory factory = new JpaRepositoryFactory(entityManager);
-		return factory.getRepository(repositoryType, customImplementation);
+		return create(() -> new JpaRepositoryFactory(entityManager), repositoryType);
 	}
 }

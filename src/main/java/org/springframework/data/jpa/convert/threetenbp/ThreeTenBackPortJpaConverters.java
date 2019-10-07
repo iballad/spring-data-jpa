@@ -1,11 +1,11 @@
 /*
- * Copyright 2015 the original author or authors.
+ * Copyright 2015-2019 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
  *
- *      http://www.apache.org/licenses/LICENSE-2.0
+ *      https://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -28,20 +28,23 @@ import org.springframework.data.convert.ThreeTenBackPortConverters.InstantToDate
 import org.springframework.data.convert.ThreeTenBackPortConverters.LocalDateTimeToDateConverter;
 import org.springframework.data.convert.ThreeTenBackPortConverters.LocalDateToDateConverter;
 import org.springframework.data.convert.ThreeTenBackPortConverters.LocalTimeToDateConverter;
+import org.springframework.data.convert.ThreeTenBackPortConverters.StringToZoneIdConverter;
+import org.springframework.data.convert.ThreeTenBackPortConverters.ZoneIdToStringConverter;
 import org.springframework.orm.jpa.LocalContainerEntityManagerFactoryBean;
 import org.threeten.bp.Instant;
 import org.threeten.bp.LocalDate;
 import org.threeten.bp.LocalDateTime;
 import org.threeten.bp.LocalTime;
+import org.threeten.bp.ZoneId;
 
 /**
  * JPA 2.1 converters to turn ThreeTen back port types into legacy {@link Date}s. To activate these converters make sure
  * your persistence provider detects them by including this class in the list of mapped classes. In Spring environments,
  * you can simply register the package of this class (i.e. {@code org.springframework.data.jpa.convert.threetenbp}) as
  * package to be scanned on e.g. the {@link LocalContainerEntityManagerFactoryBean}.
- * 
+ *
  * @author Oliver Gierke
- * @see http://www.threeten.org/threetenbp
+ * @see <a href="https://www.threeten.org/threetenbp">https://www.threeten.org/threetenbp</a>
  * @since 1.8
  */
 public class ThreeTenBackPortJpaConverters {
@@ -99,6 +102,20 @@ public class ThreeTenBackPortJpaConverters {
 		@Override
 		public Instant convertToEntityAttribute(Date date) {
 			return DateToInstantConverter.INSTANCE.convert(date);
+		}
+	}
+
+	@Converter(autoApply = true)
+	public static class ZoneIdConverter implements AttributeConverter<ZoneId, String> {
+
+		@Override
+		public String convertToDatabaseColumn(ZoneId zoneId) {
+			return ZoneIdToStringConverter.INSTANCE.convert(zoneId);
+		}
+
+		@Override
+		public ZoneId convertToEntityAttribute(String zoneId) {
+			return StringToZoneIdConverter.INSTANCE.convert(zoneId);
 		}
 	}
 }

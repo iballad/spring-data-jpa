@@ -1,11 +1,11 @@
 /*
- * Copyright 2014 the original author or authors.
+ * Copyright 2014-2019 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
  *
- *      http://www.apache.org/licenses/LICENSE-2.0
+ *      https://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -15,6 +15,11 @@
  */
 package org.springframework.data.jpa.repository.query;
 
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.stream.IntStream;
+
 import javax.persistence.EntityManager;
 import javax.persistence.NamedStoredProcedureQuery;
 import javax.persistence.ParameterMode;
@@ -23,30 +28,39 @@ import javax.persistence.TypedQuery;
 
 import org.springframework.data.jpa.repository.query.JpaParameters.JpaParameter;
 import org.springframework.data.repository.query.Parameter;
+import org.springframework.data.repository.query.ParametersParameterAccessor;
 import org.springframework.data.repository.query.QueryMethod;
+import org.springframework.data.repository.query.ResultProcessor;
+import org.springframework.lang.Nullable;
 import org.springframework.util.Assert;
 import org.springframework.util.StringUtils;
 
 /**
  * {@link AbstractJpaQuery} implementation that inspects a {@link JpaQueryMethod} for the existence of an
  * {@link Procedure} annotation and creates a JPA 2.1 {@link StoredProcedureQuery} from it.
- * 
+ *
  * @author Thomas Darimont
  * @author Oliver Gierke
+ * @author Christoph Strobl
+ * @author Jens Schauder
+ * @author Mark Paluch
+ * @author Jeff Sheets
+ * @author JyotirmoyVS
  * @since 1.6
  */
 class StoredProcedureJpaQuery extends AbstractJpaQuery {
 
 	private final StoredProcedureAttributes procedureAttributes;
 	private final boolean useNamedParameters;
+	private final QueryParameterSetter.QueryMetadataCache metadataCache = new QueryParameterSetter.QueryMetadataCache();
 
 	/**
 	 * Creates a new {@link StoredProcedureJpaQuery}.
-	 * 
+	 *
 	 * @param method must not be {@literal null}
 	 * @param em must not be {@literal null}
 	 */
-	public StoredProcedureJpaQuery(JpaQueryMethod method, EntityManager em) {
+	StoredProcedureJpaQuery(JpaQueryMethod method, EntityManager em) {
 
 		super(method, em);
 		this.procedureAttributes = method.getProcedureAttributes();
@@ -56,9 +70,8 @@ class StoredProcedureJpaQuery extends AbstractJpaQuery {
 
 	/**
 	 * Determine whether to used named parameters for the given query method.
-	 * 
+	 *
 	 * @param method must not be {@literal null}.
-	 * @return
 	 */
 	private static boolean useNamedParameters(QueryMethod method) {
 
@@ -73,37 +86,44 @@ class StoredProcedureJpaQuery extends AbstractJpaQuery {
 
 	/*
 	 * (non-Javadoc)
-	 * @see org.springframework.data.jpa.repository.query.AbstractJpaQuery#createQuery(java.lang.Object[])
+	 * @see org.springframework.data.jpa.repository.query.AbstractJpaQuery#createQuery(JpaParametersParameterAccessor)
 	 */
 	@Override
-	protected StoredProcedureQuery createQuery(Object[] values) {
-		return applyHints(doCreateQuery(values), getQueryMethod());
+	protected StoredProcedureQuery createQuery(JpaParametersParameterAccessor accessor) {
+		return applyHints(doCreateQuery(accessor), getQueryMethod());
 	}
 
-	/* 
+	/*
 	 * (non-Javadoc)
-	 * @see org.springframework.data.jpa.repository.query.AbstractJpaQuery#doCreateQuery(java.lang.Object[])
+	 * @see org.springframework.data.jpa.repository.query.AbstractJpaQuery#doCreateQuery(JpaParametersParameterAccessor)
 	 */
 	@Override
-	protected StoredProcedureQuery doCreateQuery(Object[] values) {
-		return createBinder(values).bind(createStoredProcedure());
+	protected StoredProcedureQuery doCreateQuery(JpaParametersParameterAccessor accessor) {
+
+		StoredProcedureQuery storedProcedure = createStoredProcedure();
+		QueryParameterSetter.QueryMetadata metadata = metadataCache.getMetadata("singleton", storedProcedure);
+
+		return parameterBinder.get().bind(storedProcedure, metadata, accessor);
 	}
 
-	/* 
+	/*
 	 * (non-Javadoc)
-	 * @see org.springframework.data.jpa.repository.query.AbstractJpaQuery#doCreateCountQuery(java.lang.Object[])
+	 * @see org.springframework.data.jpa.repository.query.AbstractJpaQuery#doCreateCountQuery(JpaParametersParameterAccessor)
 	 */
 	@Override
-	protected TypedQuery<Long> doCreateCountQuery(Object[] values) {
-		return null;
+	protected TypedQuery<Long> doCreateCountQuery(JpaParametersParameterAccessor accessor) {
+		throw new UnsupportedOperationException("StoredProcedureQuery does not support count queries!");
 	}
 
 	/**
 	 * Extracts the output value from the given {@link StoredProcedureQuery}.
-	 * 
+	 *
 	 * @param storedProcedureQuery must not be {@literal null}.
-	 * @return
+	 *          <p>
+	 *          Result is either a single value, or a Map<String, Optional<Object>> of output parameter names to nullable
+	 *          values
 	 */
+	@Nullable
 	Object extractOutputValue(StoredProcedureQuery storedProcedureQuery) {
 
 		Assert.notNull(storedProcedureQuery, "StoredProcedureQuery must not be null!");
@@ -112,28 +132,55 @@ class StoredProcedureJpaQuery extends AbstractJpaQuery {
 			return null;
 		}
 
-		String outputParameterName = procedureAttributes.getOutputParameterName();
+		Map<String, Object> outputValues = new HashMap<>();
+		List<String> parameterNames = procedureAttributes.getOutputParameterNames();
+
+		for (int i = 0; i < parameterNames.size(); i++) {
+
+			String name = parameterNames.get(i);
+			outputValues.put(name, extractOutputParameter(storedProcedureQuery, i));
+		}
+
+		return outputValues.size() == 1 ? outputValues.values().iterator().next() : outputValues;
+	}
+
+	private Object extractOutputParameter(StoredProcedureQuery storedProcedureQuery, Integer index) {
+
+		String outputParameterName = procedureAttributes.getOutputParameterNames().get(index);
 		JpaParameters parameters = getQueryMethod().getParameters();
 
-		return useNamedParameters && StringUtils.hasText(outputParameterName) ? //
-		storedProcedureQuery.getOutputParameterValue(outputParameterName)
-				: storedProcedureQuery.getOutputParameterValue(parameters.getNumberOfParameters() + 1);
+		return extractOutputParameterValue(storedProcedureQuery, outputParameterName, index,
+				parameters.getNumberOfParameters());
+	}
+
+	/**
+	 * extract the value of an output parameter either by name or by index.
+	 *
+	 * @param storedProcedureQuery the query object of the stored procedure.
+	 * @param name the name of the output parameter
+	 * @param index index of the output parameter
+	 * @param offset for index based access the index after which to find the output parameter values
+	 * @return the value
+	 */
+	private Object extractOutputParameterValue(StoredProcedureQuery storedProcedureQuery, String name, Integer index,
+			int offset) {
+
+		return useNamedParameters && StringUtils.hasText(name) ? //
+				storedProcedureQuery.getOutputParameterValue(name)
+				: storedProcedureQuery.getOutputParameterValue(offset + index + 1);
 	}
 
 	/**
 	 * Creates a new JPA 2.1 {@link StoredProcedureQuery} from this {@link StoredProcedureJpaQuery}.
-	 * 
-	 * @return
 	 */
 	private StoredProcedureQuery createStoredProcedure() {
+
 		return procedureAttributes.isNamedStoredProcedure() ? newNamedStoredProcedureQuery()
 				: newAdhocStoredProcedureQuery();
 	}
 
 	/**
 	 * Creates a new named {@link StoredProcedureQuery} defined via an {@link NamedStoredProcedureQuery} on an entity.
-	 * 
-	 * @return
 	 */
 	private StoredProcedureQuery newNamedStoredProcedureQuery() {
 		return getEntityManager().createNamedStoredProcedureQuery(procedureAttributes.getProcedureName());
@@ -141,8 +188,6 @@ class StoredProcedureJpaQuery extends AbstractJpaQuery {
 
 	/**
 	 * Creates a new ad-hoc {@link StoredProcedureQuery} from the given {@link StoredProcedureAttributes}.
-	 * 
-	 * @return
 	 */
 	private StoredProcedureQuery newAdhocStoredProcedureQuery() {
 
@@ -158,7 +203,10 @@ class StoredProcedureJpaQuery extends AbstractJpaQuery {
 			}
 
 			if (useNamedParameters) {
-				procedureQuery.registerStoredProcedureParameter(param.getName(), param.getType(), ParameterMode.IN);
+				procedureQuery.registerStoredProcedureParameter(
+						param.getName()
+								.orElseThrow(() -> new IllegalArgumentException(ParameterBinder.PARAMETER_NEEDS_TO_BE_NAMED)),
+						param.getType(), ParameterMode.IN);
 			} else {
 				procedureQuery.registerStoredProcedureParameter(param.getIndex() + 1, param.getType(), ParameterMode.IN);
 			}
@@ -166,17 +214,21 @@ class StoredProcedureJpaQuery extends AbstractJpaQuery {
 
 		if (procedureAttributes.hasReturnValue()) {
 
-			Class<?> outputParameterType = procedureAttributes.getOutputParameterType();
 			ParameterMode mode = ParameterMode.OUT;
 
-			if (useNamedParameters) {
+			IntStream.range(0, procedureAttributes.getOutputParameterTypes().size()).forEach(i -> {
+				Class<?> outputParameterType = procedureAttributes.getOutputParameterTypes().get(i);
 
-				String outputParameterName = procedureAttributes.getOutputParameterName();
-				procedureQuery.registerStoredProcedureParameter(outputParameterName, outputParameterType, mode);
+				if (useNamedParameters) {
 
-			} else {
-				procedureQuery.registerStoredProcedureParameter(params.getNumberOfParameters() + 1, outputParameterType, mode);
-			}
+					String outputParameterName = procedureAttributes.getOutputParameterNames().get(i);
+					procedureQuery.registerStoredProcedureParameter(outputParameterName, outputParameterType, mode);
+
+				} else {
+					procedureQuery.registerStoredProcedureParameter(params.getNumberOfParameters() + i + 1, outputParameterType,
+							mode);
+				}
+			});
 		}
 
 		return procedureQuery;

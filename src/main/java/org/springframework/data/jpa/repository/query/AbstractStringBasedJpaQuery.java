@@ -1,11 +1,11 @@
 /*
- * Copyright 2008-2014 the original author or authors.
+ * Copyright 2008-2019 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
  *
- *      http://www.apache.org/licenses/LICENSE-2.0
+ *      https://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -18,29 +18,34 @@ package org.springframework.data.jpa.repository.query;
 import javax.persistence.EntityManager;
 import javax.persistence.Query;
 
-import org.springframework.data.repository.query.EvaluationContextProvider;
-import org.springframework.data.repository.query.ParameterAccessor;
-import org.springframework.data.repository.query.ParametersParameterAccessor;
+import org.springframework.data.repository.query.QueryMethodEvaluationContextProvider;
+import org.springframework.data.repository.query.ResultProcessor;
+import org.springframework.data.repository.query.ReturnedType;
 import org.springframework.expression.spel.standard.SpelExpressionParser;
 import org.springframework.util.Assert;
 
 /**
  * Base class for {@link String} based JPA queries.
- * 
+ *
  * @author Oliver Gierke
  * @author Thomas Darimont
+ * @author Jens Schauder
+ * @author Tom Hombergs
+ * @author David Madden
+ * @author Mark Paluch
  */
 abstract class AbstractStringBasedJpaQuery extends AbstractJpaQuery {
 
-	private final StringQuery query;
-	private final StringQuery countQuery;
-	private final EvaluationContextProvider evaluationContextProvider;
+	private final DeclaredQuery query;
+	private final DeclaredQuery countQuery;
+	private final QueryMethodEvaluationContextProvider evaluationContextProvider;
 	private final SpelExpressionParser parser;
+	private final QueryParameterSetter.QueryMetadataCache metadataCache = new QueryParameterSetter.QueryMetadataCache();
 
 	/**
 	 * Creates a new {@link AbstractStringBasedJpaQuery} from the given {@link JpaQueryMethod}, {@link EntityManager} and
 	 * query {@link String}.
-	 * 
+	 *
 	 * @param method must not be {@literal null}.
 	 * @param em must not be {@literal null}.
 	 * @param queryString must not be {@literal null}.
@@ -48,82 +53,107 @@ abstract class AbstractStringBasedJpaQuery extends AbstractJpaQuery {
 	 * @param parser must not be {@literal null}.
 	 */
 	public AbstractStringBasedJpaQuery(JpaQueryMethod method, EntityManager em, String queryString,
-			EvaluationContextProvider evaluationContextProvider, SpelExpressionParser parser) {
+			QueryMethodEvaluationContextProvider evaluationContextProvider, SpelExpressionParser parser) {
 
 		super(method, em);
 
 		Assert.hasText(queryString, "Query string must not be null or empty!");
 		Assert.notNull(evaluationContextProvider, "ExpressionEvaluationContextProvider must not be null!");
-		Assert.notNull(parser, "Parser must not be null or empty!");
+		Assert.notNull(parser, "Parser must not be null!");
 
 		this.evaluationContextProvider = evaluationContextProvider;
 		this.query = new ExpressionBasedStringQuery(queryString, method.getEntityInformation(), parser);
-		this.countQuery = new StringQuery(method.getCountQuery() != null ? method.getCountQuery()
-				: QueryUtils.createCountQueryFor(this.query.getQueryString(), method.getCountQueryProjection()));
+
+		DeclaredQuery countQuery = query.deriveCountQuery(method.getCountQuery(), method.getCountQueryProjection());
+		this.countQuery = ExpressionBasedStringQuery.from(countQuery, method.getEntityInformation(), parser);
+
 		this.parser = parser;
+
+		Assert.isTrue(method.isNativeQuery() || !query.usesJdbcStyleParameters(),
+				"JDBC style parameters (?) are not supported for JPA queries.");
 	}
 
 	/*
 	 * (non-Javadoc)
-	 * @see org.springframework.data.jpa.repository.query.AbstractJpaQuery#doCreateQuery(java.lang.Object[])
+	 * @see org.springframework.data.jpa.repository.query.AbstractJpaQuery#doCreateQuery(JpaParametersParameterAccessor)
 	 */
 	@Override
-	public Query doCreateQuery(Object[] values) {
+	public Query doCreateQuery(JpaParametersParameterAccessor accessor) {
 
-		ParameterAccessor accessor = new ParametersParameterAccessor(getQueryMethod().getParameters(), values);
 		String sortedQueryString = QueryUtils.applySorting(query.getQueryString(), accessor.getSort(), query.getAlias());
+		ResultProcessor processor = getQueryMethod().getResultProcessor().withDynamicProjection(accessor);
 
-		Query query = createJpaQuery(sortedQueryString);
+		Query query = createJpaQuery(sortedQueryString, processor.getReturnedType());
 
-		return createBinder(values).bindAndPrepare(query);
+		QueryParameterSetter.QueryMetadata metadata = metadataCache.getMetadata(sortedQueryString, query);
+
+		// it is ok to reuse the binding contained in the ParameterBinder although we create a new query String because the
+		// parameters in the query do not change.
+		return parameterBinder.get().bindAndPrepare(query, metadata, accessor);
 	}
 
 	/*
 	 * (non-Javadoc)
-	 * @see org.springframework.data.jpa.repository.query.AbstractJpaQuery#createBinder(java.lang.Object[])
+	 * @see org.springframework.data.jpa.repository.query.AbstractJpaQuery#createBinder(JpaParametersParameterAccessor)
 	 */
 	@Override
-	protected ParameterBinder createBinder(Object[] values) {
-		return new SpelExpressionStringQueryParameterBinder(getQueryMethod().getParameters(), values, query,
-				evaluationContextProvider, parser);
-	}
+	protected ParameterBinder createBinder() {
 
-	/**
-	 * Creates an appropriate JPA query from an {@link EntityManager} according to the current {@link AbstractJpaQuery}
-	 * type.
-	 * 
-	 * @param queryString
-	 * @return
-	 */
-	public Query createJpaQuery(String queryString) {
-		return getEntityManager().createQuery(queryString);
+		return ParameterBinderFactory.createQueryAwareBinder(getQueryMethod().getParameters(), query, parser,
+				evaluationContextProvider);
 	}
 
 	/*
 	 * (non-Javadoc)
-	 * @see org.springframework.data.jpa.repository.query.AbstractJpaQuery#doCreateCountQuery(java.lang.Object[])
+	 * @see org.springframework.data.jpa.repository.query.AbstractJpaQuery#doCreateCountQuery(JpaParametersParameterAccessor)
 	 */
 	@Override
-	protected Query doCreateCountQuery(Object[] values) {
+	protected Query doCreateCountQuery(JpaParametersParameterAccessor accessor) {
 
 		String queryString = countQuery.getQueryString();
 		EntityManager em = getEntityManager();
 
-		return createBinder(values).bind(
-				getQueryMethod().isNativeQuery() ? em.createNativeQuery(queryString) : em.createQuery(queryString, Long.class));
+		Query query = getQueryMethod().isNativeQuery() //
+				? em.createNativeQuery(queryString) //
+				: em.createQuery(queryString, Long.class);
+
+		QueryParameterSetter.QueryMetadata metadata = metadataCache.getMetadata(queryString, query);
+
+		parameterBinder.get().bind(metadata.withQuery(query), accessor, QueryParameterSetter.ErrorHandling.LENIENT);
+
+		return query;
 	}
 
 	/**
 	 * @return the query
 	 */
-	public StringQuery getQuery() {
+	public DeclaredQuery getQuery() {
 		return query;
 	}
 
 	/**
 	 * @return the countQuery
 	 */
-	public StringQuery getCountQuery() {
+	public DeclaredQuery getCountQuery() {
 		return countQuery;
+	}
+
+	/**
+	 * Creates an appropriate JPA query from an {@link EntityManager} according to the current {@link AbstractJpaQuery}
+	 * type.
+	 */
+	protected Query createJpaQuery(String queryString, ReturnedType returnedType) {
+
+		EntityManager em = getEntityManager();
+
+		if (this.query.hasConstructorExpression() || this.query.isDefaultProjection()) {
+			return em.createQuery(queryString);
+		}
+
+		Class<?> typeToRead = getTypeToRead(returnedType);
+
+		return typeToRead == null //
+				? em.createQuery(queryString) //
+				: em.createQuery(queryString, typeToRead);
 	}
 }

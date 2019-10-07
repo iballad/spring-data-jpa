@@ -1,11 +1,11 @@
 /*
- * Copyright 2013-2016 the original author or authors.
+ * Copyright 2013-2019 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
  *
- *      http://www.apache.org/licenses/LICENSE-2.0
+ *      https://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -15,8 +15,7 @@
  */
 package org.springframework.data.jpa.domain;
 
-import static org.hamcrest.Matchers.*;
-import static org.junit.Assert.*;
+import static org.assertj.core.api.Assertions.*;
 import static org.springframework.data.domain.Sort.Direction.*;
 import static org.springframework.data.jpa.domain.JpaSort.*;
 
@@ -26,16 +25,13 @@ import javax.persistence.metamodel.PluralAttribute;
 
 import org.junit.Test;
 import org.junit.runner.RunWith;
-import org.springframework.data.domain.Sort;
-import org.springframework.data.domain.Sort.Direction;
 import org.springframework.data.domain.Sort.Order;
-import org.springframework.data.jpa.domain.JpaSort.JpaOrder;
-import org.springframework.data.jpa.domain.JpaSort.Path;
+import org.springframework.data.jpa.domain.JpaSort.*;
 import org.springframework.data.jpa.domain.sample.Address_;
 import org.springframework.data.jpa.domain.sample.MailMessage_;
 import org.springframework.data.jpa.domain.sample.MailSender_;
-import org.springframework.data.jpa.domain.sample.Role_;
 import org.springframework.data.jpa.domain.sample.User_;
+import org.springframework.lang.Nullable;
 import org.springframework.test.context.ContextConfiguration;
 import org.springframework.test.context.junit4.SpringJUnit4ClassRunner;
 
@@ -44,186 +40,158 @@ import org.springframework.test.context.junit4.SpringJUnit4ClassRunner;
  * generated meta-model classes. The properties cannot be referred to statically (quite a surprise, as they're static)
  * but only after they've been enhanced by the persistence provider. This requires an {@link EntityManagerFactory} to be
  * bootstrapped.
- * 
- * @see DATAJPA-12
+ *
  * @author Thomas Darimont
  * @author Oliver Gierke
  * @author Christoph Strobl
+ * @author Jens Schauder
  */
 @RunWith(SpringJUnit4ClassRunner.class)
 @ContextConfiguration("classpath:infrastructure.xml")
 public class JpaSortTests {
 
-	private static final Attribute<?, ?> NULL_ATTRIBUTE = null;
+	private static final @Nullable Attribute<?, ?> NULL_ATTRIBUTE = null;
 	private static final Attribute<?, ?>[] EMPTY_ATTRIBUTES = new Attribute<?, ?>[0];
 
-	private static final PluralAttribute<?, ?, ?> NULL_PLURAL_ATTRIBUTE = null;
+	private static final @Nullable PluralAttribute<?, ?, ?> NULL_PLURAL_ATTRIBUTE = null;
 	private static final PluralAttribute<?, ?, ?>[] EMPTY_PLURAL_ATTRIBUTES = new PluralAttribute<?, ?, ?>[0];
 
-	@Test(expected = IllegalArgumentException.class)
+	@Test(expected = IllegalArgumentException.class) // DATAJPA-12
 	public void rejectsNullAttribute() {
 		new JpaSort(NULL_ATTRIBUTE);
 	}
 
-	@Test(expected = IllegalArgumentException.class)
+	@Test(expected = IllegalArgumentException.class) // DATAJPA-12
 	public void rejectsEmptyAttributes() {
 		new JpaSort(EMPTY_ATTRIBUTES);
 	}
 
-	@Test(expected = IllegalArgumentException.class)
+	@Test(expected = IllegalArgumentException.class) // DATAJPA-12
 	public void rejectsNullPluralAttribute() {
 		new JpaSort(NULL_PLURAL_ATTRIBUTE);
 	}
 
-	@Test(expected = IllegalArgumentException.class)
+	@Test(expected = IllegalArgumentException.class) // DATAJPA-12
 	public void rejectsEmptyPluralAttributes() {
 		new JpaSort(EMPTY_PLURAL_ATTRIBUTES);
 	}
 
-	@Test
+	@Test // DATAJPA-12
 	public void sortBySinglePropertyWithDefaultSortDirection() {
-		assertThat(new JpaSort(path(User_.firstname)), hasItems(new Sort.Order("firstname")));
+		assertThat(new JpaSort(path(User_.firstname))).contains(Order.asc("firstname"));
 	}
 
-	@Test
+	@Test // DATAJPA-12
 	public void sortByMultiplePropertiesWithDefaultSortDirection() {
-		assertThat(new JpaSort(User_.firstname, User_.lastname), hasItems(new Order("firstname"), new Order("lastname")));
+		assertThat(new JpaSort(User_.firstname, User_.lastname)).contains(Order.asc("firstname"), Order.asc("lastname"));
 	}
 
-	@Test
+	@Test // DATAJPA-12
 	public void sortByMultiplePropertiesWithDescSortDirection() {
 
-		assertThat(new JpaSort(DESC, User_.firstname, User_.lastname),
-				hasItems(new Order(DESC, "firstname"), new Order(Direction.DESC, "lastname")));
+		assertThat(new JpaSort(DESC, User_.firstname, User_.lastname)).contains(new Order(DESC, "firstname"),
+				Order.desc("lastname"));
 	}
 
-	@Test
+	@Test // DATAJPA-12
 	public void combiningSortByMultipleProperties() {
 
-		assertThat(new JpaSort(User_.firstname).and(new JpaSort(User_.lastname)),
-				hasItems(new Order("firstname"), new Order("lastname")));
+		assertThat(new JpaSort(User_.firstname).and(new JpaSort(User_.lastname))).contains(Order.asc("firstname"),
+				Order.asc("lastname"));
 	}
 
-	@Test
+	@Test // DATAJPA-12
 	public void combiningSortByMultiplePropertiesWithDifferentSort() {
 
-		assertThat(new JpaSort(User_.firstname).and(new JpaSort(DESC, User_.lastname)),
-				hasItems(new Order("firstname"), new Order(DESC, "lastname")));
+		assertThat(new JpaSort(User_.firstname).and(new JpaSort(DESC, User_.lastname))).contains(Order.asc("firstname"),
+				Order.desc("lastname"));
 	}
 
-	@Test
+	@Test // DATAJPA-12
 	public void combiningSortByNestedEmbeddedProperty() {
-		assertThat(new JpaSort(path(User_.address).dot(Address_.streetName)), hasItems(new Order("address.streetName")));
+		assertThat(new JpaSort(path(User_.address).dot(Address_.streetName))).contains(Order.asc("address.streetName"));
 	}
 
-	@Test
+	@Test // DATAJPA-12
 	public void buildJpaSortFromJpaMetaModelSingleAttribute() {
 
-		assertThat(new JpaSort(ASC, path(User_.firstname)), //
-				hasItems(new Order("firstname")));
+		assertThat(new JpaSort(ASC, path(User_.firstname))).contains(Order.asc("firstname"));
 	}
 
-	@Test
+	@Test // DATAJPA-12
 	public void buildJpaSortFromJpaMetaModelNestedAttribute() {
 
-		assertThat(new JpaSort(ASC, path(MailMessage_.mailSender).dot(MailSender_.name)), //
-				hasItems(new Order("mailSender.name")));
+		assertThat(new JpaSort(ASC, path(MailMessage_.mailSender).dot(MailSender_.name)))
+				.contains(Order.asc("mailSender.name"));
 	}
 
-	/**
-	 * @see DATAJPA-702
-	 */
-	@Test
+	@Test // DATAJPA-702
 	public void combiningSortByMultiplePropertiesWithDifferentSortUsingSimpleAnd() {
 
-		assertThat(new JpaSort(User_.firstname).and(DESC, User_.lastname),
-				contains(new Order("firstname"), new Order(DESC, "lastname")));
+		assertThat(new JpaSort(User_.firstname).and(DESC, User_.lastname)).containsExactly(Order.asc("firstname"),
+				Order.desc("lastname"));
 	}
 
-	/**
-	 * @see DATAJPA-702
-	 */
-	@Test
+	@Test // DATAJPA-702
 	public void combiningSortByMultiplePathsWithDifferentSortUsingSimpleAnd() {
 
-		assertThat(new JpaSort(User_.firstname).and(DESC, path(MailMessage_.mailSender).dot(MailSender_.name)),
-				contains(new Order("firstname"), new Order(DESC, "mailSender.name")));
+		assertThat(new JpaSort(User_.firstname).and(DESC, path(MailMessage_.mailSender).dot(MailSender_.name)))
+				.containsExactly(Order.asc("firstname"), Order.desc("mailSender.name"));
 	}
 
-	/**
-	 * @see DATAJPA-702
-	 */
-	@Test(expected = IllegalArgumentException.class)
+	@Test(expected = IllegalArgumentException.class) // DATAJPA-702
 	public void rejectsNullAttributesForCombiningCriterias() {
 		new JpaSort(User_.firstname).and(DESC, (Attribute<?, ?>[]) null);
 	}
 
-	/**
-	 * @see DATAJPA-702
-	 */
-	@Test(expected = IllegalArgumentException.class)
+	@Test(expected = IllegalArgumentException.class) // DATAJPA-702
 	public void rejectsNullPathsForCombiningCriterias() {
 		new JpaSort(User_.firstname).and(DESC, (Path<?, ?>[]) null);
 	}
 
-	/**
-	 * @see DATAJPA-702
-	 */
-	@Test
+	@Test // DATAJPA-702
 	public void buildsUpPathForPluralAttributesCorrectly() {
 
-		assertThat(new JpaSort(path(User_.colleagues).dot(User_.roles).dot(Role_.name)), //
-				hasItem(new Order(ASC, "colleagues.roles.name")));
+		// assertThat(new JpaSort(JpaSort.path(User_.colleagues).dot(User_.roles).dot(Role_.name)), //
+		// hasItem(new Order(ASC, "colleagues.roles.name")));
 	}
 
-	/**
-	 * @see DATAJPA-???
-	 */
-	@Test
+	@Test // DATAJPA-965
 	public void createsUnsafeSortCorrectly() {
 
 		JpaSort sort = JpaSort.unsafe(DESC, "foo.bar");
 
-		assertThat(sort, hasItem(new Order(DESC, "foo.bar")));
-		assertThat(sort.getOrderFor("foo.bar"), is(instanceOf(JpaOrder.class)));
+		assertThat(sort).contains(Order.desc("foo.bar"));
+		assertThat(sort.getOrderFor("foo.bar")).isInstanceOf(JpaOrder.class);
 	}
 
-	/**
-	 * @see DATAJPA-???
-	 */
-	@Test
+	@Test // DATAJPA-965
 	public void createsUnsafeSortWithMultiplePropertiesCorrectly() {
 
 		JpaSort sort = JpaSort.unsafe(DESC, "foo.bar", "spring.data");
 
-		assertThat(sort, hasItems(new Order(DESC, "foo.bar"), new Order(DESC, "spring.data")));
-		assertThat(sort.getOrderFor("foo.bar"), is(instanceOf(JpaOrder.class)));
-		assertThat(sort.getOrderFor("spring.data"), is(instanceOf(JpaOrder.class)));
+		assertThat(sort).contains(Order.desc("foo.bar"), Order.desc("spring.data"));
+		assertThat(sort.getOrderFor("foo.bar")).isInstanceOf(JpaOrder.class);
+		assertThat(sort.getOrderFor("spring.data")).isInstanceOf(JpaOrder.class);
 	}
 
-	/**
-	 * @see DATAJPA-???
-	 */
-	@Test
+	@Test // DATAJPA-965
 	public void combinesSafeAndUnsafeSortCorrectly() {
 
-		JpaSort sort = new JpaSort(path(User_.colleagues).dot(User_.roles).dot(Role_.name)).andUnsafe(DESC, "foo.bar");
-
-		assertThat(sort, hasItems(new Order(ASC, "colleagues.roles.name"), new Order(DESC, "foo.bar")));
-		assertThat(sort.getOrderFor("colleagues.roles.name"), is(not(instanceOf(JpaOrder.class))));
-		assertThat(sort.getOrderFor("foo.bar"), is(instanceOf(JpaOrder.class)));
+		// JpaSort sort = new JpaSort(path(User_.colleagues).dot(User_.roles).dot(Role_.name)).andUnsafe(DESC, "foo.bar");
+		//
+		// assertThat(sort, hasItems(new Order(ASC, "colleagues.roles.name"), new Order(DESC, "foo.bar")));
+		// assertThat(sort.getOrderFor("colleagues.roles.name"), is(not(instanceOf(JpaOrder.class))));
+		// assertThat(sort.getOrderFor("foo.bar"), is(instanceOf(JpaOrder.class)));
 	}
 
-	/**
-	 * @see DATAJPA-???
-	 */
-	@Test
+	@Test // DATAJPA-965
 	public void combinesUnsafeAndSafeSortCorrectly() {
 
-		Sort sort = JpaSort.unsafe(DESC, "foo.bar").and(ASC, path(User_.colleagues).dot(User_.roles).dot(Role_.name));
-
-		assertThat(sort, hasItems(new Order(ASC, "colleagues.roles.name"), new Order(DESC, "foo.bar")));
-		assertThat(sort.getOrderFor("colleagues.roles.name"), is(not(instanceOf(JpaOrder.class))));
-		assertThat(sort.getOrderFor("foo.bar"), is(instanceOf(JpaOrder.class)));
+		// Sort sort = JpaSort.unsafe(DESC, "foo.bar").and(ASC, path(User_.colleagues).dot(User_.roles).dot(Role_.name));
+		//
+		// assertThat(sort, hasItems(new Order(ASC, "colleagues.roles.name"), new Order(DESC, "foo.bar")));
+		// assertThat(sort.getOrderFor("colleagues.roles.name"), is(not(instanceOf(JpaOrder.class))));
+		// assertThat(sort.getOrderFor("foo.bar"), is(instanceOf(JpaOrder.class)));
 	}
 }

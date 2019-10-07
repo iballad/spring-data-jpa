@@ -1,11 +1,11 @@
 /*
- * Copyright 2011 the original author or authors.
+ * Copyright 2011-2019 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
  *
- *      http://www.apache.org/licenses/LICENSE-2.0
+ *      https://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -21,6 +21,7 @@ import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Map;
 import java.util.Map.Entry;
+import java.util.Optional;
 import java.util.Set;
 
 import javax.enterprise.event.Observes;
@@ -38,10 +39,11 @@ import org.springframework.data.repository.cdi.CdiRepositoryExtensionSupport;
 
 /**
  * A portable CDI extension which registers beans for Spring Data JPA repositories.
- * 
+ *
  * @author Dirk Mahler
  * @author Oliver Gierke
  * @author Mark Paluch
+ * @author Christoph Strobl
  */
 public class JpaRepositoryExtension extends CdiRepositoryExtensionSupport {
 
@@ -56,7 +58,7 @@ public class JpaRepositoryExtension extends CdiRepositoryExtensionSupport {
 	/**
 	 * Implementation of a an observer which checks for EntityManager beans and stores them in {@link #entityManagers} for
 	 * later association with corresponding repository beans.
-	 * 
+	 *
 	 * @param <X> The type.
 	 * @param processBean The annotated type as defined by CDI.
 	 */
@@ -80,7 +82,7 @@ public class JpaRepositoryExtension extends CdiRepositoryExtensionSupport {
 	 * repositories.
 	 * <p>
 	 * The repository beans are associated to the EntityManagers using their qualifiers.
-	 * 
+	 *
 	 * @param beanManager The BeanManager instance.
 	 */
 	void afterBeanDiscovery(@Observes AfterBeanDiscovery afterBeanDiscovery, BeanManager beanManager) {
@@ -102,7 +104,7 @@ public class JpaRepositoryExtension extends CdiRepositoryExtensionSupport {
 
 	/**
 	 * Creates a {@link Bean}.
-	 * 
+	 *
 	 * @param <T> The type of the repository.
 	 * @param repositoryType The class representing the repository.
 	 * @param beanManager The BeanManager instance.
@@ -121,6 +123,6 @@ public class JpaRepositoryExtension extends CdiRepositoryExtensionSupport {
 
 		// Construct and return the repository bean.
 		return new JpaRepositoryBean<T>(beanManager, entityManagerBean, qualifiers, repositoryType,
-				getCustomImplementationDetector());
+				Optional.of(getCustomImplementationDetector()));
 	}
 }

@@ -1,11 +1,11 @@
 /*
- * Copyright 2012 the original author or authors.
+ * Copyright 2012-2019 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
  *
- *      http://www.apache.org/licenses/LICENSE-2.0
+ *      https://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -16,8 +16,7 @@
 package org.springframework.data.jpa.repository.support;
 
 import static java.util.Arrays.*;
-import static org.hamcrest.Matchers.*;
-import static org.junit.Assert.*;
+import static org.assertj.core.api.Assertions.*;
 import static org.mockito.Mockito.*;
 
 import java.io.Serializable;
@@ -33,16 +32,17 @@ import org.junit.Before;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.mockito.Mock;
-import org.mockito.runners.MockitoJUnitRunner;
+import org.mockito.junit.MockitoJUnitRunner;
 import org.springframework.data.jpa.domain.sample.PersistableWithIdClass;
 import org.springframework.data.jpa.domain.sample.PersistableWithIdClassPK;
 
 /**
  * Unit tests for {@link JpaMetamodelEntityInformation}.
- * 
+ *
  * @author Oliver Gierke
+ * @author Jens Schauder
  */
-@RunWith(MockitoJUnitRunner.class)
+@RunWith(MockitoJUnitRunner.Silent.class)
 public class JpaMetamodelEntityInformationUnitTests {
 
 	@Mock Metamodel metamodel;
@@ -70,19 +70,16 @@ public class JpaMetamodelEntityInformationUnitTests {
 		when(idType.getJavaType()).thenReturn(PersistableWithIdClassPK.class);
 	}
 
-	/**
-	 * @see DATAJPA-50
-	 */
-	@Test
+	@Test // DATAJPA-50
 	public void doesNotCreateIdIfAllPartialAttributesAreNull() {
 
 		JpaMetamodelEntityInformation<PersistableWithIdClass, Serializable> information = new JpaMetamodelEntityInformation<PersistableWithIdClass, Serializable>(
 				PersistableWithIdClass.class, metamodel);
 
 		PersistableWithIdClass entity = new PersistableWithIdClass(null, null);
-		assertThat(information.getId(entity), is(nullValue()));
+		assertThat(information.getId(entity)).isNull();
 
 		entity = new PersistableWithIdClass(2L, null);
-		assertThat(information.getId(entity), is(notNullValue()));
+		assertThat(information.getId(entity)).isNotNull();
 	}
 }
